@@ -19,6 +19,45 @@ const ch = (name: string) => channelName(FILE, name);
 const rendererIpcCall = (name: string) =>
   `window.__ea[${JSON.stringify(name)}](...args)`;
 
+describe("channelPrefix", () => {
+  test("transform() with prefix includes prefixed channels in handlers (file-level)", () => {
+    const input = `
+"use node";
+
+export async function getUser() {
+  return {};
+}
+
+export async function deleteUser() {
+  return {};
+}
+`;
+    const withPrefix = transform(input, FILE, "my-app:");
+    const withoutPrefix = transform(input, FILE);
+    expect(withPrefix?.handlers).toEqual(
+      withoutPrefix?.handlers.map((h) => `my-app:${h}`),
+    );
+  });
+
+  test("transform() with prefix includes prefixed channels in handlers (function-level)", () => {
+    const input = `
+export async function getUser() {
+  "use node";
+  return {};
+}
+
+export async function notMarked() {
+  return {};
+}
+`;
+    const withPrefix = transform(input, FILE, "pfx:");
+    const withoutPrefix = transform(input, FILE);
+    expect(withPrefix?.handlers).toEqual(
+      withoutPrefix?.handlers.map((h) => `pfx:${h}`),
+    );
+  });
+});
+
 describe("transform", () => {
   describe("file top-level directive", () => {
     test("identify top-level directive", async () => {
