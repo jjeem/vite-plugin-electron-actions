@@ -8,7 +8,8 @@ on:
 
 jobs:
   release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -37,7 +38,7 @@ jobs:
         run: echo "value=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
-        run: pnpm publish --no-git-checks --access public
+        run: pnpm publish --provenance --no-git-checks --access public
 
       - name: Create GitHub Release
         run: |
