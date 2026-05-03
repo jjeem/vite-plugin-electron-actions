@@ -190,6 +190,11 @@ electronActions({
   // Directories to scan for handlers (default: ["src"])
   // Paths are relative to the Vite root.
   scanDirs: ["src"],
+
+  // Optional prefix prepended to every IPC channel name (default: "")
+  // Useful when multiple plugin instances need isolated handler sets
+  // (e.g. separate renderer windows).
+  channelPrefix: "my-app:",
 })
 ```
 
@@ -266,6 +271,12 @@ Channel names are automatically derived from a hash of the absolute file path an
 
 ```
 src/users/api.ts → getUser   becomes   "a3f2b1c4:getUser"
+```
+
+With a `channelPrefix` set to `"my-app:"`:
+
+```
+src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4:getUser"
 ```
 
 You never reference channel names directly — this is handled automatically. Channel strings do not appear in the renderer bundle at all.

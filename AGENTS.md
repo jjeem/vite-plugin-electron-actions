@@ -82,7 +82,7 @@ electron-actions/
 │   ├── virtual.d.ts          # Ambient type declarations for virtual modules (electron-actions:preload)
 │   ├── plugin/
 │   │   ├── ast.ts            # AST utilities (collectIdentifierPositions)
-│   │   ├── channel.ts        # channelName() — derives IPC channel from file path + function name
+│   │   ├── channel.ts        # channelName() — derives IPC channel from file path, function name, and optional prefix
 │   │   ├── directives.ts     # checkFileLevelDirective(), checkFunctionLevelDirective()
 │   │   ├── handlerModule.ts  # generateHandlerModule() — codegen for electron-actions:handlers
 │   │   ├── handlers.ts       # extractHandlerNames(), extractNonExportedHandlerNames()
@@ -151,7 +151,7 @@ In the preload script:
 
 ```ts
 import { contextBridge, ipcRenderer } from "electron"
-import { createElectronActionsRenderer } from "electron-actions/preload"
+import { createElectronActionsRenderer } from "vite-plugin-electron-actions/preload"
 
 createElectronActionsRenderer(contextBridge, ipcRenderer)
 ```
@@ -178,14 +178,13 @@ export default defineConfig({
     vite: {
       plugins: [electronActions()],  // main process
     },
-  }]),
-  // preload
-  preload: {
-    input: "electron/preload.ts",
-    vite: {
-      plugins: [electronActions()],  // preload — needed for electron-actions:preload virtual module
+    preload: {
+      input: "electron/preload.ts",
+      vite: {
+        plugins: [electronActions()],  // preload — needed for electron-actions:preload virtual module
+      },
     },
-  },
+  }]),
 })
 ```
 

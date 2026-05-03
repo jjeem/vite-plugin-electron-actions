@@ -23,6 +23,7 @@ export function electronActions(options: ElectronActionsOptions = {}): Plugin {
   const includePattern = options.include ?? /\.[jt]sx?$/;
   const filter = createFilter(includePattern, options.exclude);
   const scanDirs = options.scanDirs ?? ["src"];
+  const channelPrefix = options.channelPrefix ?? "";
 
   let root = process.cwd();
 
@@ -76,7 +77,7 @@ export function electronActions(options: ElectronActionsOptions = {}): Plugin {
       if (id === RESOLVED_HANDLERS_ID) {
         // Scan filesystem for handlers — works in both renderer
         // and main process build contexts
-        const scanned = scanForHandlers(scanDirs, root);
+        const scanned = scanForHandlers(scanDirs, root, channelPrefix);
 
         // Merge with any handlers discovered during transform
         for (const [fileId, handlers] of handlerRegistry) {
@@ -89,7 +90,7 @@ export function electronActions(options: ElectronActionsOptions = {}): Plugin {
       }
 
       if (id === RESOLVED_PRELOAD_ID) {
-        const scanned = scanForHandlers(scanDirs, root);
+        const scanned = scanForHandlers(scanDirs, root, channelPrefix);
 
         for (const [fileId, handlers] of handlerRegistry) {
           if (!scanned.has(fileId)) {
@@ -131,7 +132,7 @@ export function electronActions(options: ElectronActionsOptions = {}): Plugin {
         if (id.startsWith(RESOLVED_RAW_PREFIX)) return null;
         if (!filter(id)) return null;
 
-        const result = transform(code, id);
+        const result = transform(code, id, channelPrefix);
         if (!result) return null;
 
         if (result.handlers.length > 0) {
