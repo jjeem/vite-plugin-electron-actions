@@ -47,6 +47,7 @@ function walkDir(dir: string): string[] {
 export function scanForHandlers(
   dirs: string[],
   root: string,
+  prefix = "",
 ): Map<string, string[]> {
   const registry = new Map<string, string[]>();
 
@@ -69,7 +70,7 @@ export function scanForHandlers(
       if (!isFileLevel && !isFunctionLevel) continue;
 
       const funcNames = extractHandlerNames(program, isFileLevel);
-      const channels = funcNames.map((n) => channelName(filePath, n));
+      const channels = funcNames.map((n) => channelName(filePath, n, prefix));
       if (channels.length > 0) {
         registry.set(filePath, channels);
       }

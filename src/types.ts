@@ -20,4 +20,14 @@ export interface ElectronActionsOptions {
    * @default ["src"]
    */
   scanDirs?: string[];
+  /**
+   * Optional prefix prepended to every IPC channel name.
+   *
+   * Useful when multiple plugin instances (e.g. separate renderer
+   * windows) need to register distinct handler sets without channel
+   * name collisions.
+   *
+   * @default ""
+   */
+  channelPrefix?: string;
 }

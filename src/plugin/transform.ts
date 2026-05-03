@@ -307,6 +307,7 @@ export function transformFunctionLevelDirective(
 export function transform(
   code: string,
   fileName: string,
+  prefix = "",
 ): TransformResult | null {
   const { program } = parseSync(fileName, code);
 
@@ -316,7 +317,7 @@ export function transform(
   if (!isFileLevel && !isFunctionLevel) return null;
 
   const funcNames = extractHandlerNames(program, isFileLevel);
-  const handlers = funcNames.map((n) => channelName(fileName, n));
+  const handlers = funcNames.map((n) => channelName(fileName, n, prefix));
 
   if (isFileLevel) {
     return {
