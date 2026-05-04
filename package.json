@@ -43,8 +43,9 @@
     "dev": "tsdown --watch",
     "build": "tsdown",
     "test": "vitest run",
-    "check": "biome check --write",
-    "check:unsafe": "biome check --write --unsafe"
+    "typecheck": "tsc --noEmit",
+    "check": "biome check",
+    "check:fix": "biome check --write"
   },
   "peerDependencies": {
     "electron": ">=30.0.0",

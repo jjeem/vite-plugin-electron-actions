@@ -2,6 +2,9 @@
 
 A Vite plugin that lets you mark functions with a `"use node"` directive so they run in the Electron main process — similar to React `"use server"`. The plugin transforms marked functions into IPC calls in the renderer and automatically registers `ipcMain.handle()` calls in the main process.
 
+> [!CAUTION]
+> This package is in early development. The API and internal behavior are subject to frequent changes. Do not use in production without expecting breaking changes in any version.
+
 ## Installation
 
 ```bash
