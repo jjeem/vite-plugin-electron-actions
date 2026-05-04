@@ -1,20 +1,30 @@
 export interface ElectronActionsOptions {
   /**
+   * The Electron build environment this plugin instance is for.
+   *
+   * Register the plugin once per Vite config with the matching env:
+   * - `"renderer"` — transforms `"use node"` files into IPC stubs
+   * - `"main"`     — generates the `setupMain()` implementation
+   * - `"preload"`  — generates the `setupPreload()` implementation
+   */
+  env: "renderer" | "main" | "preload";
+  /**
    * A `RegExp` matched against the absolute file path.
    * Only files that match are processed by the plugin.
-   * When omitted, all files are considered for transformation.
+   * Applies to the `renderer` env only.
+   * When omitted, all `.js/.ts/.jsx/.tsx` files are considered.
    */
   include?: RegExp;
   /**
    * A `RegExp` matched against the absolute file path.
-   * Files that match are skipped by the plugin entirely.
-   * Takes precedence over `include`.
+   * Files that match are skipped. Takes precedence over `include`.
+   * Applies to the `renderer` env only.
    */
   exclude?: RegExp;
   /**
    * Directories to scan for `"use node"` files when generating
-   * the virtual `electron-actions:handlers` module.
-   *
+   * `setupMain()` and `setupPreload()`.
+   * Applies to `main` and `preload` envs.
    * Paths are relative to the Vite root.
    *
    * @default ["src"]
@@ -22,10 +32,7 @@ export interface ElectronActionsOptions {
   scanDirs?: string[];
   /**
    * Optional prefix prepended to every IPC channel name.
-   *
-   * Useful when multiple plugin instances (e.g. separate renderer
-   * windows) need to register distinct handler sets without channel
-   * name collisions.
+   * Applies to `main` and `preload` envs.
    *
    * @default ""
    */

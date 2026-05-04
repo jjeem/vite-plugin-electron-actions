@@ -83,8 +83,8 @@ export function extractHandlerNames(
 
 /**
  * Returns names of non-exported functions/arrows that have a "use node"
- * directive. These need to be re-exported in the ea-raw: shim so that
- * ipcMain.handle() can reference them via `import * as ns`.
+ * directive. These need to be re-exported via electron-actions:non-exported-actions:
+ * so that ipcMain.handle() can reference them via `import * as ns`.
  */
 export function extractNonExportedHandlerNames(program: Program): string[] {
   if (!checkFunctionLevelDirective(program)) return [];
