@@ -34,7 +34,9 @@ const RESOLVED_RE_EXPORT_PREFIX = "\0electron-actions:non-exported-actions:";
 // ── Plugin ─────────────────────────────────────────────────────
 
 export function electronActions(options: ElectronActionsOptions): Plugin {
-  const { env } = options;
+  // The optional chaining ("options?.env") is to help display a more specific
+  // error message if the user forgets to pass an options object
+  const env = options?.env;
 
   if (env === "renderer") {
     const includePattern = options.include ?? /\.[jt]sx?$/;
@@ -166,7 +168,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   throw new Error(
-    `[electron-actions] Unknown env: "${(options as { env: unknown }).env}". Must be "renderer", "main", or "preload".`,
+    `[electron-actions] Unknown env: "${env}". Must be "renderer", "main", or "preload".`,
   );
 }
 
