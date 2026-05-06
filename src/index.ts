@@ -41,7 +41,6 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   if (env === "renderer") {
     const includePattern = options.include ?? /\.[jt]sx?$/;
     const filter = createFilter(includePattern, options.exclude);
-    const channelPrefix = options.channelPrefix ?? "";
 
     return {
       name: "electron-actions:renderer",
@@ -52,10 +51,10 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
           // Guard for Vite < 6.3 where hook filters are not supported.
           if (!filter(id)) return null;
 
-          const result = transform(code, id, channelPrefix);
+          const result = transform(code, id);
           if (!result) return null;
 
-          return { code: result.code, map: null };
+          return { code: result, map: null };
         },
       },
     };

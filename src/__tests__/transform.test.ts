@@ -1,12 +1,12 @@
 import { parse, parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
 import { collectIdentifierPositions } from "../plugin/ast.ts";
+import { channelName } from "../plugin/channel.ts";
 import {
   generateChannelsModule,
   generateHandlersMapModule,
 } from "../plugin/codegen.ts";
 import {
-  channelName,
   checkFileLevelDirective,
   checkFunctionLevelDirective,
   transform,
@@ -17,48 +17,8 @@ import {
 // Use a fixed absolute file path so channel names are deterministic.
 const FILE = "/file.ts";
 
-const ch = (name: string) => channelName(FILE, name);
 const rendererIpcCall = (name: string) =>
   `window.__ea[${JSON.stringify(name)}](...args)`;
-
-describe("channelPrefix", () => {
-  test("transform() with prefix includes prefixed channels in handlers (file-level)", () => {
-    const input = `
-"use node";
-
-export async function getUser() {
-  return {};
-}
-
-export async function deleteUser() {
-  return {};
-}
-`;
-    const withPrefix = transform(input, FILE, "my-app:");
-    const withoutPrefix = transform(input, FILE);
-    expect(withPrefix?.handlers).toEqual(
-      withoutPrefix?.handlers.map((h) => `my-app:${h}`),
-    );
-  });
-
-  test("transform() with prefix includes prefixed channels in handlers (function-level)", () => {
-    const input = `
-export async function getUser() {
-  "use node";
-  return {};
-}
-
-export async function notMarked() {
-  return {};
-}
-`;
-    const withPrefix = transform(input, FILE, "pfx:");
-    const withoutPrefix = transform(input, FILE);
-    expect(withPrefix?.handlers).toEqual(
-      withoutPrefix?.handlers.map((h) => `pfx:${h}`),
-    );
-  });
-});
 
 describe("transform", () => {
   describe("file top-level directive", () => {
@@ -424,7 +384,7 @@ export async function getUser(id) {
       expect(transform(input, FILE)).toBeNull();
     });
 
-    test("transforms file-level directive and extracts handlers", () => {
+    test("transforms file-level directive", () => {
       const input = `
 "use node";
 
@@ -438,12 +398,11 @@ export const sum = async (a, b) => {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([ch("getUser"), ch("sum")]);
-      expect(result?.code).toContain(rendererIpcCall("getUser"));
-      expect(result?.code).toContain(rendererIpcCall("sum"));
+      expect(result).toContain(rendererIpcCall("getUser"));
+      expect(result).toContain(rendererIpcCall("sum"));
     });
 
-    test("transforms function-level directive and extracts only marked handlers", () => {
+    test("transforms function-level directive for only marked functions", () => {
       const input = `\
 export async function noDirective() {
   return 1;
@@ -461,14 +420,8 @@ export const arrowDirective = async (x) => {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([
-        ch("withDirective"),
-        ch("arrowDirective"),
-      ]);
-      // noDirective should NOT be in handlers
-      expect(result?.handlers).not.toContain(ch("noDirective"));
-      // noDirective should remain untransformed in code
-      expect(result?.code).toContain("return 1;");
+      // noDirective should NOT be transformed
+      expect(result).toContain("return 1;");
     });
 
     test("file-level throws on sync exported function", () => {
@@ -535,7 +488,7 @@ export async function asyncFunc() {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([ch("asyncFunc")]);
+      expect(result).toContain(rendererIpcCall("asyncFunc"));
     });
 
     test("function-level extracts sync exported functions with directive", () => {
@@ -547,7 +500,7 @@ export function getData() {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([ch("getData")]);
+      expect(result).toContain(rendererIpcCall("getData"));
     });
 
     test("handler names match IPC channels in generated code", () => {
@@ -565,12 +518,8 @@ export async function getFile() {
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
       // Channel strings must NOT appear in renderer output — they are hidden in the preload
-      for (const channel of result?.handlers ?? []) {
-        expect(result?.code).not.toContain(JSON.stringify(channel));
-      }
-      // Instead, named function calls appear
-      expect(result?.code).toContain(rendererIpcCall("getUser"));
-      expect(result?.code).toContain(rendererIpcCall("getFile"));
+      expect(result).toContain(rendererIpcCall("getUser"));
+      expect(result).toContain(rendererIpcCall("getFile"));
     });
   });
 });
