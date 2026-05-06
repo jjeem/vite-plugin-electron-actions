@@ -9,27 +9,15 @@ import {
   parseSync,
 } from "oxc-parser";
 import { collectIdentifierPositions } from "./ast.js";
-import { channelName } from "./channel.js";
 import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
   hasUseNodeDirective,
 } from "./directives.js";
-import { extractHandlerNames } from "./handlers.js";
 import { ipcInvokerArrow, ipcInvokerFn } from "./ipcInvoker.js";
-
-// ── Types ──────────────────────────────────────────────────────
-
-export interface TransformResult {
-  /** Transformed renderer code with IPC calls */
-  code: string;
-  /** Handler names extracted from this file */
-  handlers: string[];
-}
 
 // ── Re-exports for external consumers ─────────────────────────
 
-export { channelName } from "./channel.js";
 export {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
@@ -300,15 +288,10 @@ export function transformFunctionLevelDirective(
 /**
  * Main transform function called by the Vite plugin.
  *
- * Returns the renderer stub code and a list of handler channel names
- * to be registered in the main process, or `null` if the file
+ * Returns the transformed renderer stub code, or `null` if the file
  * contains no `"use node"` directives.
  */
-export function transform(
-  code: string,
-  fileName: string,
-  prefix = "",
-): TransformResult | null {
+export function transform(code: string, fileName: string): string | null {
   const { program } = parseSync(fileName, code);
 
   const isFileLevel = checkFileLevelDirective(program);
@@ -316,18 +299,9 @@ export function transform(
 
   if (!isFileLevel && !isFunctionLevel) return null;
 
-  const funcNames = extractHandlerNames(program, isFileLevel);
-  const handlers = funcNames.map((n) => channelName(fileName, n, prefix));
-
   if (isFileLevel) {
-    return {
-      code: transformFileLevelDirective(fileName, code),
-      handlers,
-    };
+    return transformFileLevelDirective(fileName, code);
   }
 
-  return {
-    code: transformFunctionLevelDirective(fileName, code),
-    handlers,
-  };
+  return transformFunctionLevelDirective(fileName, code);
 }

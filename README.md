@@ -13,9 +13,9 @@ npm install vite-plugin-electron-actions
 
 ## Setup
 
-### With `vite-plugin-electron`
+The plugin must be registered **three times** — once for each Vite build environment — each with the appropriate `env` value.
 
-Register the plugin **three times** — once for the renderer build, once for the main process build, and once for the preload build. All three run in isolated Vite instances and each needs the plugin.
+### With `vite-plugin-electron`
 
 ```typescript
 // vite.config.ts
@@ -25,17 +25,17 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [
-    electronActions(), // renderer
+    electronActions({ env: "renderer" }),
     electron([
       {
         entry: "electron/main.ts",
         vite: {
-          plugins: [electronActions()], // main process
+          plugins: [electronActions({ env: "main" })],
         },
         preload: {
           input: "electron/preload.ts",
           vite: {
-            plugins: [electronActions()], // preload
+            plugins: [electronActions({ env: "preload" })],
           },
         },
       },
@@ -46,8 +46,6 @@ export default defineConfig({
 
 ### Without `vite-plugin-electron` (pure Vite)
 
-If you are not using `vite-plugin-electron`, you can wire up the three builds manually with separate Vite configs.
-
 **`vite.config.ts`** (renderer):
 
 ```typescript
@@ -55,7 +53,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 export default defineConfig({
-  plugins: [electronActions()],
+  plugins: [electronActions({ env: "renderer" })],
 })
 ```
 
@@ -67,15 +65,10 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   build: {
-    lib: {
-      entry: "electron/main.ts",
-      formats: ["cjs"],
-    },
-    rollupOptions: {
-      external: ["electron"],
-    },
+    lib: { entry: "electron/main.ts", formats: ["cjs"] },
+    rollupOptions: { external: ["electron"] },
   },
-  plugins: [electronActions()],
+  plugins: [electronActions({ env: "main" })],
 })
 ```
 
@@ -87,39 +80,36 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   build: {
-    lib: {
-      entry: "electron/preload.ts",
-      formats: ["cjs"],
-    },
-    rollupOptions: {
-      external: ["electron"],
-    },
+    lib: { entry: "electron/preload.ts", formats: ["cjs"] },
+    rollupOptions: { external: ["electron"] },
   },
-  plugins: [electronActions()],
+  plugins: [electronActions({ env: "preload" })],
 })
 ```
 
-The plugin must be in the preload config so the `electron-actions:preload` virtual module resolves correctly.
-
 ### Main process
 
-Import the virtual module to register all `ipcMain.handle()` calls:
+Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls:
 
 ```typescript
 // electron/main.ts
-import "electron-actions:handlers"
+import { setupMain } from "vite-plugin-electron-actions/main"
+
+app.whenReady().then(() => {
+  setupMain()
+  // ...
+})
 ```
 
 ### Preload script
 
-Expose the IPC bridge to the renderer:
+Call `setupPreload()` to expose all `"use node"` functions to the renderer via `contextBridge`:
 
 ```typescript
 // electron/preload.ts
-import { contextBridge, ipcRenderer } from "electron"
-import { createElectronActionsRenderer } from "vite-plugin-electron-actions/preload"
+import { setupPreload } from "vite-plugin-electron-actions/preload"
 
-createElectronActionsRenderer(contextBridge, ipcRenderer)
+setupPreload()
 ```
 
 This exposes `window.__ea` via `contextBridge.exposeInMainWorld` as an object of individually named functions. Each function is locked to a single pre-determined IPC channel — the renderer cannot invoke arbitrary channels.
@@ -184,6 +174,9 @@ Type/interface exports (`export type Foo`, `export interface Bar`) are silently 
 
 ```typescript
 electronActions({
+  // Required: which Vite build environment this instance serves
+  env: "renderer" | "main" | "preload",
+
   // Files to include (default: all .js/.ts/.jsx/.tsx)
   include: /\.[jt]sx?$/,
 
@@ -246,27 +239,31 @@ export async function getUser(...args) {
 }
 ```
 
-**Preload virtual module** (`electron-actions:preload`):
+**`setupMain()` — generated at build time**:
 
 ```typescript
-// Generated at build time — maps function names to their IPC channels
-export const channels = {
+// electron-actions:handlers-map (generated — data only)
+import * as _ea0 from "/abs/path/src/api.ts"
+
+export default {
+  "a3f2b1c4:getUser": _ea0["getUser"],
+}
+```
+
+`setupMain()` in `src/main/index.ts` iterates this map and calls `ipcMain.handle()` for each entry.
+
+**`setupPreload()` — generated at build time**:
+
+```typescript
+// electron-actions:channels (generated — data only)
+export default {
   "getUser": "a3f2b1c4:getUser",
 }
 ```
 
-`createElectronActionsRenderer` reads this map and wires up a named function per entry via `contextBridge`, so channel strings are only ever present in the preload and main process bundles — never in the renderer.
+`setupPreload()` in `src/preload/index.ts` iterates this map and wires up `contextBridge.exposeInMainWorld("__ea", api)`.
 
-**Main process virtual module** (`electron-actions:handlers`):
-
-```typescript
-import { ipcMain } from "electron"
-import * as _ea0 from "ea-raw:/abs/path/src/api.ts"
-
-ipcMain.handle("a3f2b1c4:getUser", (_event, ...args) => _ea0["getUser"](...args))
-```
-
-The `ea-raw:` prefix tells the plugin to serve the **original untransformed** source to the main process build so the real implementation runs there.
+Channel strings are only ever present in the preload and main process bundles — never in the renderer.
 
 ### IPC channel names
 

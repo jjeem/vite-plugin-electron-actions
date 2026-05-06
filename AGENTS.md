@@ -7,8 +7,8 @@
 pnpm exec tsc --noEmit    # Check for TypeScript errors (run after any source changes)
 pnpm run dev          # Build with watch mode (tsdown)
 pnpm run build        # Build library
-pnpm run check        # Biome check --write
-pnpm run check:unsafe # Biome check --write --unsafe
+pnpm run check        # Biome check
+pnpm run check:fix # Biome check --write
 pnpm run test         # Run tests (vitest)
 
 ```
@@ -42,8 +42,8 @@ Use `pnpm run check` script
 
 ```typescript
 // Use double quotes
-import { ipcMain } from "electron"
-import path from "node:path"
+import { ipcMain } from "electron";
+import path from "node:path";
 
 // Organize imports (Biome auto-fixes this)
 // External imports first, then internal
@@ -77,30 +77,33 @@ Key rules enforced:
 ```
 electron-actions/
 ├── src/
-│   ├── index.ts              # Vite plugin entry: electronActions(), resolveId, load, transform hooks
-│   ├── types.ts              # ElectronActionsOptions type
-│   ├── virtual.d.ts          # Ambient type declarations for virtual modules (electron-actions:preload)
+│   ├── index.ts              # Vite plugin entry: electronActions({ env }), three env-specific branches
+│   ├── types.ts              # ElectronActionsOptions type (env field required)
+│   ├── virtual.d.ts          # Ambient type declarations for electron-actions:channels and electron-actions:handlers-map
 │   ├── plugin/
 │   │   ├── ast.ts            # AST utilities (collectIdentifierPositions)
 │   │   ├── channel.ts        # channelName() — derives IPC channel from file path, function name, and optional prefix
+│   │   ├── codegen.ts        # generateChannelsModule(), generateHandlersMapModule() — data-only virtual module codegen
 │   │   ├── directives.ts     # checkFileLevelDirective(), checkFunctionLevelDirective()
-│   │   ├── handlerModule.ts  # generateHandlerModule() — codegen for electron-actions:handlers
 │   │   ├── handlers.ts       # extractHandlerNames(), extractNonExportedHandlerNames()
 │   │   ├── ipcInvoker.ts     # ipcInvokerFn(), ipcInvokerArrow() — renderer stub generators
-│   │   ├── preloadModule.ts  # generatePreloadModule() — codegen for electron-actions:preload
 │   │   ├── scanner.ts        # scanForHandlers() — filesystem scan for "use node" files
 │   │   └── transform.ts      # transform(), transformFileLevelDirective(), transformFunctionLevelDirective()
+│   ├── main/
+│   │   └── index.ts          # setupMain() — real impl; imports electron-actions:handlers-map
 │   └── preload/
-│       └── index.ts          # createElectronActionsRenderer() — exposes window.__ea via contextBridge
+│       └── index.ts          # setupPreload() + Window.__ea global type; imports electron-actions:channels
 ├── src/__tests__/
-│   └── transform.test.ts     # vitest tests covering transform and directive detection
+│   └── transform.test.ts     # vitest tests covering transform, directives, and codegen
 ├── dist/                     # Built output (gitignored)
 │   ├── index.mjs             # ESM build (main entry)
 │   ├── index.cjs             # CJS build (main entry)
 │   ├── index.d.mts           # ESM type declarations
 │   ├── index.d.cts           # CJS type declarations
+│   ├── main/
+│   │   └── index.mjs         # ESM build (main entry — setupMain)
 │   └── preload/
-│       └── index.mjs         # ESM build (preload entry)
+│       └── index.mjs         # ESM build (preload entry — setupPreload)
 ```
 
 ## How the Plugin Works
@@ -128,38 +131,53 @@ const writeToFile = async () => {
 }
 ```
 
-### Virtual Module: `electron-actions:handlers`
+### Virtual Module: `electron-actions:handlers-map`
 
-Import this in the Electron main process to register all `ipcMain.handle()` calls:
+Intercepted by the `env:"main"` plugin. Generates a data-only default export of
+`{ [channelString]: handlerFn }` by importing all handler files. `setupMain()` in
+`src/main/index.ts` iterates this map and calls `ipcMain.handle()` for each entry:
 
 ```ts
-import "electron-actions:handlers"
+import { setupMain } from "vite-plugin-electron-actions/main";
+setupMain();
 ```
 
-The plugin scans `scanDirs` (default `["src"]`) at build time to discover all handlers. Non-exported `"use node"` functions are automatically re-exported in the `ea-raw:` shim so `ipcMain.handle()` can reference them.
+The plugin scans `scanDirs` (default `["src"]`) at build time to discover all handlers.
+Non-exported `"use node"` functions are automatically re-exported via the internal
+`electron-actions:non-exported-actions:` prefix so `ipcMain.handle()` can reference them.
 
-### Virtual Module: `electron-actions:preload`
+### Virtual Module: `electron-actions:channels`
 
-Imported automatically by `electron-actions/preload` inside the preload build. Exports a
-`channels` map of `{ [fnName]: channelString }` so `createElectronActionsRenderer()` can
-wire up individual named functions via `contextBridge` without ever exposing channel
-strings to the renderer.
+Intercepted by the `env:"preload"` plugin. Generates a data-only default export of
+`{ [fnName]: channelString }`. `setupPreload()` in `src/preload/index.ts` iterates this
+map and wires up `contextBridge.exposeInMainWorld("__ea", api)`:
+
+```ts
+import { setupPreload } from "vite-plugin-electron-actions/preload";
+setupPreload();
+```
+
+The plugin scans `scanDirs` (default `["src"]`) at build time to discover all handlers.
+Non-exported `"use node"` functions are automatically re-exported via the internal
+`electron-actions:non-exported-actions:` prefix so `ipcMain.handle()` can reference them.
+
+### Virtual Module: `vite-plugin-electron-actions/preload`
+
+Intercepted by the `env:"preload"` plugin. The generated `setupPreload()` body imports
+`contextBridge` and `ipcRenderer` from `"electron"` and wires up every discovered handler
+as a named function on `window.__ea`. Call it once in your preload script:
+
+```ts
+import { setupPreload } from "vite-plugin-electron-actions/preload";
+setupPreload();
+```
 
 ### Renderer Bridge
 
-In the preload script:
-
-```ts
-import { contextBridge, ipcRenderer } from "electron"
-import { createElectronActionsRenderer } from "vite-plugin-electron-actions/preload"
-
-createElectronActionsRenderer(contextBridge, ipcRenderer)
-```
-
-This exposes `window.__ea` via `contextBridge.exposeInMainWorld` as an object of individually
-named functions, each locked to a single pre-determined IPC channel. The renderer cannot
-invoke arbitrary channels — it can only call the specific named functions declared with
-`"use node"`.
+`setupPreload()` exposes `window.__ea` via `contextBridge.exposeInMainWorld` as an object
+of individually named functions, each locked to a single pre-determined IPC channel. The
+renderer cannot invoke arbitrary channels — it can only call the specific named functions
+declared with `"use node"`.
 
 ### Plugin Registration
 
@@ -168,31 +186,31 @@ renderer build, once for the main process build, and once for the preload build 
 in isolated Vite instances):
 
 ```ts
-import { electronActions } from "vite-plugin-electron-actions"
+import { electronActions } from "vite-plugin-electron-actions";
 
 export default defineConfig({
-  plugins: [electronActions()],  // renderer
+  plugins: [electronActions({ env: "renderer" })],
   // ...
   electron([{
     entry: "electron/main.ts",
     vite: {
-      plugins: [electronActions()],  // main process
+      plugins: [electronActions({ env: "main" })],
     },
     preload: {
       input: "electron/preload.ts",
       vite: {
-        plugins: [electronActions()],  // preload — needed for electron-actions:preload virtual module
+        plugins: [electronActions({ env: "preload" })],
       },
     },
   }]),
-})
+});
 ```
 
 ### Virtual Module Prefixes
 
-- `electron-actions:handlers` — virtual module for main process handler registration
-- `electron-actions:preload` — virtual module for preload script; exports the `channels` map
-- `ea-raw:<absolute-path>` — serves original untransformed source to the main process build; appends `export { name }` for non-exported `"use node"` functions
+- `electron-actions:handlers-map` — intercepted by `env:"main"` plugin; generates a data-only `{ [channel]: handlerFn }` default export consumed by `setupMain()`
+- `electron-actions:channels` — intercepted by `env:"preload"` plugin; generates a data-only `{ [fnName]: channelString }` default export consumed by `setupPreload()`
+- `electron-actions:non-exported-actions:<absolute-path>` — internal only; serves original source with additional `export { name }` for non-exported `"use node"` functions so `ipcMain.handle()` can reference them
 
 ## Dependencies
 
