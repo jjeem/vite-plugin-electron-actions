@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { parse, parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
 import { collectIdentifierPositions } from "../plugin/ast.ts";
@@ -6,6 +9,7 @@ import {
   generateChannelsModule,
   generateHandlersMapModule,
 } from "../plugin/codegen.ts";
+import { scanForHandlers } from "../plugin/scanner.ts";
 import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
@@ -668,5 +672,51 @@ describe("generateHandlersMapModule", () => {
     expect(result).toContain(`import * as _ea1 from "/src/posts.ts"`);
     expect(result).toContain(`"${ch1}": _ea0["getUser"]`);
     expect(result).toContain(`"${ch2}": _ea1["getPost"]`);
+  });
+});
+
+describe("channelPrefix integration", () => {
+  const setup = (onTestFinished: (fn: () => void) => void) => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "ea-test-"));
+    onTestFinished(() => rmSync(tmpDir, { recursive: true, force: true }));
+    const srcDir = path.join(tmpDir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(
+      path.join(srcDir, "api.ts"),
+      `"use node";\nexport async function getUser() { return {}; }\n`,
+    );
+    return { root: tmpDir };
+  };
+
+  test("channelPrefix flows through scanForHandlers → generateHandlersMapModule (main env)", ({
+    onTestFinished,
+  }) => {
+    const { root } = setup(onTestFinished);
+    const prefix = "my-app:";
+    const registry = scanForHandlers(["src"], root, prefix);
+    const result = generateHandlersMapModule(registry, (f) => f);
+    // Every channel key in the output must start with the prefix
+    for (const channels of registry.values()) {
+      for (const channel of channels) {
+        expect(channel.startsWith(prefix)).toBe(true);
+        expect(result).toContain(JSON.stringify(channel));
+      }
+    }
+  });
+
+  test("channelPrefix flows through scanForHandlers → generateChannelsModule (preload env)", ({
+    onTestFinished,
+  }) => {
+    const { root } = setup(onTestFinished);
+    const prefix = "my-app:";
+    const registry = scanForHandlers(["src"], root, prefix);
+    const result = generateChannelsModule(registry);
+    // Every channel value in the output must start with the prefix
+    for (const channels of registry.values()) {
+      for (const channel of channels) {
+        expect(channel.startsWith(prefix)).toBe(true);
+        expect(result).toContain(JSON.stringify(channel));
+      }
+    }
   });
 });
