@@ -9,6 +9,20 @@ import { ipcMain } from "electron";
  */
 export function setupMain(): void {
   for (const [channel, fn] of Object.entries(handlers)) {
-    ipcMain.handle(channel, (_event, ...args) => fn(...args));
+    try {
+      ipcMain.handle(channel, (_event, ...args) => fn(...args));
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        err.message
+          .toLowerCase()
+          .includes("attempted to register a second handler for")
+      ) {
+        throw new Error(
+          `[vite-plugin-electron-actions]: "${channel}" is already registered. Ensure you call setupMain() only once in your main process.`,
+        );
+      }
+      throw err;
+    }
   }
 }
