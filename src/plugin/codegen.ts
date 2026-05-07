@@ -1,19 +1,26 @@
+import type { DiscoveredAction } from "./channel.js";
+
 /**
  * Generate code for the `electron-actions:channels` virtual module.
  *
- * Produces a default export of `{ [fnName]: channelString }` consumed by
+ * Produces a default export of `{ [actionId]: channelString }` consumed by
  * `setupPreload()` in `src/preload/index.ts`.
+ *
+ * Using the actionId (not the raw function name) as the key eliminates
+ * preload collisions when multiple handlers share the same function name
+ * across files or within the same file.
  */
 export function generateChannelsModule(
-  registry: Map<string, string[]>,
+  registry: Map<string, DiscoveredAction[]>,
 ): string {
   if (registry.size === 0) return "export default {};";
 
   const entries: string[] = [];
-  for (const channels of registry.values()) {
-    for (const channel of channels) {
-      const fnName = channel.slice(channel.lastIndexOf(":") + 1);
-      entries.push(`  ${JSON.stringify(fnName)}: ${JSON.stringify(channel)},`);
+  for (const actions of registry.values()) {
+    for (const action of actions) {
+      entries.push(
+        `  ${JSON.stringify(action.actionId)}: ${JSON.stringify(action.channel)},`,
+      );
     }
   }
 
@@ -26,12 +33,12 @@ export function generateChannelsModule(
  * Produces a default export of `{ [channelString]: handlerFn }` consumed by
  * `setupMain()` in `src/main/index.ts`.
  *
- * @param registry - Map of absolute file path → channel strings
+ * @param registry - Map of absolute file path → discovered actions
  * @param resolveImport - Returns the import specifier for a given file path
  *   (allows the caller to inject `electron-actions:non-exported-actions:` when needed)
  */
 export function generateHandlersMapModule(
-  registry: Map<string, string[]>,
+  registry: Map<string, DiscoveredAction[]>,
   resolveImport: (filePath: string) => string,
 ): string {
   if (registry.size === 0) return "export default {};";
@@ -40,16 +47,15 @@ export function generateHandlersMapModule(
   const entries: string[] = [];
   let counter = 0;
 
-  for (const [fileId, channels] of registry) {
+  for (const [fileId, actions] of registry) {
     const ns = `_ea${counter++}`;
     imports.push(
       `import * as ${ns} from ${JSON.stringify(resolveImport(fileId))};`,
     );
 
-    for (const channel of channels) {
-      const fnName = channel.slice(channel.lastIndexOf(":") + 1);
+    for (const action of actions) {
       entries.push(
-        `  ${JSON.stringify(channel)}: ${ns}[${JSON.stringify(fnName)}],`,
+        `  ${JSON.stringify(action.channel)}: ${ns}[${JSON.stringify(action.functionName)}],`,
       );
     }
   }

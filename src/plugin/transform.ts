@@ -9,6 +9,7 @@ import {
   parseSync,
 } from "oxc-parser";
 import { collectIdentifierPositions } from "./ast.js";
+import { makeActionId } from "./channel.js";
 import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
@@ -71,7 +72,8 @@ export function transformFileLevelDirective(
         throw new Error("Exported async function must have a name");
       }
       const name = declaration.id.name;
-      newCode = newCode.concat(`export ${ipcInvokerFn(name)}\n`);
+      const actionId = makeActionId(fileName, name, declaration.start);
+      newCode = newCode.concat(`export ${ipcInvokerFn(name, actionId)}\n`);
     }
 
     if (declaration?.type === "VariableDeclaration") {
@@ -84,7 +86,10 @@ export function transformFileLevelDirective(
         if (isAsyncArrow || isAsyncFnExpr) {
           if (decl.id.type === "Identifier") {
             const name = decl.id.name;
-            newCode = newCode.concat(`export ${ipcInvokerArrow(name)}\n`);
+            const actionId = makeActionId(fileName, name, decl.start);
+            newCode = newCode.concat(
+              `export ${ipcInvokerArrow(name, actionId)}\n`,
+            );
           }
         } else {
           // Non-async variable export (e.g. `export const x = 5`) — not allowed
@@ -160,7 +165,12 @@ export function transformFunctionLevelDirective(
             );
           }
           const name = declaration.id.name;
-          s.overwrite(node.start, node.end, `export ${ipcInvokerFn(name)}`);
+          const actionId = makeActionId(fileName, name, declaration.start);
+          s.overwrite(
+            node.start,
+            node.end,
+            `export ${ipcInvokerFn(name, actionId)}`,
+          );
         }
       }
 
@@ -172,10 +182,11 @@ export function transformFunctionLevelDirective(
             hasUseNodeDirective(decl.init.body)
           ) {
             const name = decl.id.name;
+            const actionId = makeActionId(fileName, name, decl.start);
             s.overwrite(
               node.start,
               node.end,
-              `export ${ipcInvokerArrow(name)}`,
+              `export ${ipcInvokerArrow(name, actionId)}`,
             );
           }
         }
@@ -189,7 +200,8 @@ export function transformFunctionLevelDirective(
           throw new Error('Function with "use node" must have a name');
         }
         const name = node.id.name;
-        s.overwrite(node.start, node.end, ipcInvokerFn(name));
+        const actionId = makeActionId(fileName, name, node.start);
+        s.overwrite(node.start, node.end, ipcInvokerFn(name, actionId));
       }
     }
 
@@ -202,7 +214,8 @@ export function transformFunctionLevelDirective(
           hasUseNodeDirective(decl.init.body)
         ) {
           const name = decl.id.name;
-          s.overwrite(node.start, node.end, ipcInvokerArrow(name));
+          const actionId = makeActionId(fileName, name, decl.start);
+          s.overwrite(node.start, node.end, ipcInvokerArrow(name, actionId));
         }
       }
     }

@@ -15,8 +15,8 @@ declare global {
  */
 export function setupPreload(): void {
   const api: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
-  for (const [fnName, channel] of Object.entries(channels)) {
-    api[fnName] = (...args) => ipcRenderer.invoke(channel, ...args);
+  for (const [actionId, channel] of Object.entries(channels)) {
+    api[actionId] = (...args) => ipcRenderer.invoke(channel, ...args);
   }
   contextBridge.exposeInMainWorld("__ea", api);
 }

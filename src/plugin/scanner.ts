@@ -1,12 +1,12 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { parseSync } from "oxc-parser";
-import { channelName } from "./channel.js";
+import { type DiscoveredAction, makeDiscoveredAction } from "./channel.js";
 import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
 } from "./directives.js";
-import { extractHandlerNames } from "./handlers.js";
+import { extractHandlerInfos } from "./handlers.js";
 
 // ── Filesystem scanner ─────────────────────────────────────────
 
@@ -38,7 +38,7 @@ function walkDir(dir: string): string[] {
 
 /**
  * Scan directories on disk for files containing `"use node"` directives
- * and return a map of absolute file paths to IPC channel names.
+ * and return a map of absolute file paths to discovered action metadata.
  *
  * This is used by the virtual module `load` hook so the main process
  * build can discover handlers without relying on the renderer's
@@ -48,8 +48,8 @@ export function scanForHandlers(
   dirs: string[],
   root: string,
   prefix = "",
-): Map<string, string[]> {
-  const registry = new Map<string, string[]>();
+): Map<string, DiscoveredAction[]> {
+  const registry = new Map<string, DiscoveredAction[]>();
 
   for (const dir of dirs) {
     const absDir = path.isAbsolute(dir) ? dir : path.join(root, dir);
@@ -69,10 +69,12 @@ export function scanForHandlers(
 
       if (!isFileLevel && !isFunctionLevel) continue;
 
-      const funcNames = extractHandlerNames(program, isFileLevel);
-      const channels = funcNames.map((n) => channelName(filePath, n, prefix));
-      if (channels.length > 0) {
-        registry.set(filePath, channels);
+      const handlerInfos = extractHandlerInfos(program, isFileLevel);
+      const actions = handlerInfos.map(({ name, start }) =>
+        makeDiscoveredAction(filePath, name, start, prefix),
+      );
+      if (actions.length > 0) {
+        registry.set(filePath, actions);
       }
     }
   }

@@ -6,16 +6,31 @@ import {
 
 // ── Handler extraction ─────────────────────────────────────────
 
+/** Raw metadata extracted for a single discovered handler. */
+export interface HandlerInfo {
+  /** The original JS function identifier. */
+  name: string;
+  /**
+   * Byte offset of the function/variable-declarator node in the source.
+   * Used as the position discriminator in the action ID so same-named
+   * handlers in the same file produce distinct IDs.
+   */
+  start: number;
+}
+
 /**
- * Extract handler names to register in ipcMain.
+ * Extract handler infos to register in ipcMain.
  * - File-level: all exported async functions / async arrow fns
  * - Function-level: all functions (exported or not) with "use node" body
+ *
+ * Returns name + byte-offset pairs rather than bare names so callers can
+ * derive collision-free action IDs.
  */
-export function extractHandlerNames(
+export function extractHandlerInfos(
   program: Program,
   fileLevel: boolean,
-): string[] {
-  const names: string[] = [];
+): HandlerInfo[] {
+  const infos: HandlerInfo[] = [];
 
   for (const node of program.body) {
     if (node.type === "ExportNamedDeclaration") {
@@ -24,14 +39,14 @@ export function extractHandlerNames(
       if (declaration?.type === "FunctionDeclaration") {
         if (fileLevel) {
           if (declaration.async && declaration.id?.type === "Identifier") {
-            names.push(declaration.id.name);
+            infos.push({ name: declaration.id.name, start: declaration.start });
           }
         } else {
           if (
             declaration.id?.type === "Identifier" &&
             hasUseNodeDirective(declaration.body)
           ) {
-            names.push(declaration.id.name);
+            infos.push({ name: declaration.id.name, start: declaration.start });
           }
         }
       }
@@ -44,11 +59,11 @@ export function extractHandlerNames(
           ) {
             if (fileLevel) {
               if (decl.init.async) {
-                names.push(decl.id.name);
+                infos.push({ name: decl.id.name, start: decl.start });
               }
             } else {
               if (hasUseNodeDirective(decl.init.body)) {
-                names.push(decl.id.name);
+                infos.push({ name: decl.id.name, start: decl.start });
               }
             }
           }
@@ -60,7 +75,7 @@ export function extractHandlerNames(
     if (!fileLevel) {
       if (node.type === "FunctionDeclaration") {
         if (node.id?.type === "Identifier" && hasUseNodeDirective(node.body)) {
-          names.push(node.id.name);
+          infos.push({ name: node.id.name, start: node.start });
         }
       }
 
@@ -71,14 +86,14 @@ export function extractHandlerNames(
             decl.id.type === "Identifier" &&
             hasUseNodeDirective(decl.init.body)
           ) {
-            names.push(decl.id.name);
+            infos.push({ name: decl.id.name, start: decl.start });
           }
         }
       }
     }
   }
 
-  return names;
+  return infos;
 }
 
 /**
