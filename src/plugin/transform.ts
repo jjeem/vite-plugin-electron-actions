@@ -1,8 +1,5 @@
 import MagicString from "magic-string";
 import {
-  type BlockStatement,
-  type Expression,
-  type FunctionBody,
   type ImportDefaultSpecifier,
   type ImportNamespaceSpecifier,
   type ImportSpecifier,
@@ -43,21 +40,6 @@ export function transformFileLevelDirective(
     if (!declaration && node.specifiers && node.specifiers.length > 0) {
       throw new Error(
         `[electron-actions] File-level "use node" does not allow re-exports (\`export { ... }\`). Found in ${fileName}.`,
-      );
-    }
-
-    // `export type Foo` / `export interface Foo` — silently skip (no runtime value)
-    if (
-      declaration?.type === "TSTypeAliasDeclaration" ||
-      declaration?.type === "TSInterfaceDeclaration"
-    ) {
-      continue;
-    }
-
-    // `export class Foo` — not allowed
-    if (declaration?.type === "ClassDeclaration") {
-      throw new Error(
-        `[electron-actions] File-level "use node" does not allow class exports. Found in ${fileName}.`,
       );
     }
 
@@ -106,47 +88,11 @@ export function transformFunctionLevelDirective(
   const { program } = parseSync(fileName, code);
   const s = new MagicString(code);
 
-  // ── Collect "use node" body spans ─────────────────────────────
-  // We need to know which regions are inside "use node" functions
-  // so we can determine import usage outside those regions.
+  // ── Collect "use node" body spans + replace with IPC stubs ───
+  // Done in a single pass: record spans for import-removal, and
+  // overwrite each "use node" function with its IPC invoker stub.
   const useNodeBodySpans: Array<{ start: number; end: number }> = [];
 
-  function recordUseNodeBody(
-    body: BlockStatement | FunctionBody | Expression | null | undefined,
-  ) {
-    if (hasUseNodeDirective(body)) {
-      useNodeBodySpans.push({
-        start: body.start,
-        end: body.end,
-      });
-    }
-  }
-
-  for (const node of program.body) {
-    if (node.type === "ExportNamedDeclaration") {
-      const { declaration } = node;
-      if (declaration?.type === "FunctionDeclaration") {
-        recordUseNodeBody(declaration.body);
-      }
-      if (declaration?.type === "VariableDeclaration") {
-        for (const decl of declaration.declarations) {
-          if (decl.init?.type === "ArrowFunctionExpression") {
-            recordUseNodeBody(decl.init.body);
-          }
-        }
-      }
-    }
-    if (node.type === "FunctionDeclaration") recordUseNodeBody(node.body);
-    if (node.type === "VariableDeclaration") {
-      for (const decl of node.declarations) {
-        if (decl.init?.type === "ArrowFunctionExpression") {
-          recordUseNodeBody(decl.init.body);
-        }
-      }
-    }
-  }
-
-  // ── Replace "use node" functions with IPC calls ───────────────
   for (const node of program.body) {
     // ── exported function declaration ──────────────────────────
     if (node.type === "ExportNamedDeclaration") {
@@ -154,12 +100,21 @@ export function transformFunctionLevelDirective(
 
       if (declaration?.type === "FunctionDeclaration") {
         if (hasUseNodeDirective(declaration.body)) {
+          if (!declaration.async) {
+            throw new Error(
+              `[electron-actions] Function-level "use node" only allows async functions. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+            );
+          }
           if (!declaration.id || declaration.id.type !== "Identifier") {
             throw new Error(
               'Exported function with "use node" must have a name',
             );
           }
           const name = declaration.id.name;
+          useNodeBodySpans.push({
+            start: declaration.body.start,
+            end: declaration.body.end,
+          });
           s.overwrite(node.start, node.end, `export ${ipcInvokerFn(name)}`);
         }
       }
@@ -171,7 +126,16 @@ export function transformFunctionLevelDirective(
             decl.id.type === "Identifier" &&
             hasUseNodeDirective(decl.init.body)
           ) {
+            if (!decl.init.async) {
+              throw new Error(
+                `[electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
+              );
+            }
             const name = decl.id.name;
+            useNodeBodySpans.push({
+              start: decl.init.body.start,
+              end: decl.init.body.end,
+            });
             s.overwrite(
               node.start,
               node.end,
@@ -185,10 +149,16 @@ export function transformFunctionLevelDirective(
     // ── non-exported function declaration ──────────────────────
     if (node.type === "FunctionDeclaration") {
       if (hasUseNodeDirective(node.body)) {
+        if (!node.async) {
+          throw new Error(
+            `[electron-actions] Function-level "use node" only allows async functions. Found sync function \`${node.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+          );
+        }
         if (!node.id || node.id.type !== "Identifier") {
           throw new Error('Function with "use node" must have a name');
         }
         const name = node.id.name;
+        useNodeBodySpans.push({ start: node.body.start, end: node.body.end });
         s.overwrite(node.start, node.end, ipcInvokerFn(name));
       }
     }
@@ -201,7 +171,16 @@ export function transformFunctionLevelDirective(
           decl.id.type === "Identifier" &&
           hasUseNodeDirective(decl.init.body)
         ) {
+          if (!decl.init.async) {
+            throw new Error(
+              `[electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
+            );
+          }
           const name = decl.id.name;
+          useNodeBodySpans.push({
+            start: decl.init.body.start,
+            end: decl.init.body.end,
+          });
           s.overwrite(node.start, node.end, ipcInvokerArrow(name));
         }
       }

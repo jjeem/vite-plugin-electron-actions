@@ -327,23 +327,21 @@ function internalHelper() {
 `);
     });
 
-    test("transform sync exported function with directive", () => {
+    test("throws on sync exported function with directive", () => {
       const input = `\
 export function getData() {
   "use node";
   return { value: 42 };
 }
 `;
-      expect(transformFunctionLevelDirective(FILE, input)).toEqual(`\
-export async function getData(...args) {
-  return await ${rendererIpcCall("getData")};
-}
-`);
+      expect(() => transformFunctionLevelDirective(FILE, input)).toThrow(
+        /only allows async functions/,
+      );
     });
 
     test("transforms non-exported functions with directive", () => {
       const input = `\
-function internalFn() {
+async function internalFn() {
   "use node";
   return 1;
 }
@@ -362,6 +360,18 @@ export async function publicFn(...args) {
   return await ${rendererIpcCall("publicFn")};
 }
 `);
+    });
+
+    test("throws on sync non-exported function with directive", () => {
+      const input = `\
+function internalFn() {
+  "use node";
+  return 1;
+}
+`;
+      expect(() => transformFunctionLevelDirective(FILE, input)).toThrow(
+        /only allows async functions/,
+      );
     });
 
     test("no changes when no function has the directive", () => {
@@ -459,15 +469,6 @@ export async function asyncFunc() {
       expect(() => transform(input, FILE)).toThrow(/re-exports/);
     });
 
-    test("file-level throws on class export", () => {
-      const input = `
-"use node";
-
-export class Foo {}
-`;
-      expect(() => transform(input, FILE)).toThrow(/class exports/);
-    });
-
     test("file-level throws on non-async variable export", () => {
       const input = `
 "use node";
@@ -495,16 +496,16 @@ export async function asyncFunc() {
       expect(result).toContain(rendererIpcCall("asyncFunc"));
     });
 
-    test("function-level extracts sync exported functions with directive", () => {
+    test("function-level throws on sync exported function with directive", () => {
       const input = `\
 export function getData() {
   "use node";
   return { value: 42 };
 }
 `;
-      const result = transform(input, FILE);
-      expect(result).not.toBeNull();
-      expect(result).toContain(rendererIpcCall("getData"));
+      expect(() => transform(input, FILE)).toThrow(
+        /only allows async functions/,
+      );
     });
 
     test("handler names match IPC channels in generated code", () => {
