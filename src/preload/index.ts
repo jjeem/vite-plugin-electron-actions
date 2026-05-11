@@ -1,5 +1,5 @@
-import { channels } from "electron-actions:preload";
-import type { ContextBridge, IpcRenderer } from "electron";
+import channels from "electron-actions:channels";
+import { contextBridge, ipcRenderer } from "electron";
 
 declare global {
   interface Window {
@@ -8,19 +8,15 @@ declare global {
 }
 
 /**
- * Call this in your preload script to expose individual named IPC
- * functions via contextBridge. Each function is locked to a single
- * pre-determined channel — the renderer cannot invoke arbitrary channels.
+ * Call this in your preload script to expose all `"use node"` functions
+ * to the renderer via contextBridge, each locked to its own IPC channel.
+ *
+ * Requires `electronActions({ env: "preload" })` in your Vite config.
  */
-export function createElectronActionsRenderer(
-  contextBridge: ContextBridge,
-  ipcRenderer: IpcRenderer,
-): void {
+export function setupPreload(): void {
   const api: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
-
   for (const [fnName, channel] of Object.entries(channels)) {
-    api[fnName] = (...args: unknown[]) => ipcRenderer.invoke(channel, ...args);
+    api[fnName] = (...args) => ipcRenderer.invoke(channel, ...args);
   }
-
   contextBridge.exposeInMainWorld("__ea", api);
 }

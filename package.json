@@ -25,6 +25,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./main": {
+      "import": {
+        "types": "./dist/main/index.d.mts",
+        "default": "./dist/main/index.mjs"
+      },
+      "require": {
+        "types": "./dist/main/index.d.cts",
+        "default": "./dist/main/index.cjs"
+      }
+    },
     "./preload": {
       "import": {
         "types": "./dist/preload/index.d.mts",

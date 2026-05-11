@@ -1,10 +1,16 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { parse, parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
 import { collectIdentifierPositions } from "../plugin/ast.ts";
-import { generateHandlerModule } from "../plugin/handlerModule.ts";
-import { generatePreloadModule } from "../plugin/preloadModule.ts";
+import { channelName } from "../plugin/channel.ts";
 import {
-  channelName,
+  generateChannelsModule,
+  generateHandlersMapModule,
+} from "../plugin/codegen.ts";
+import { scanForHandlers } from "../plugin/scanner.ts";
+import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
   transform,
@@ -15,48 +21,8 @@ import {
 // Use a fixed absolute file path so channel names are deterministic.
 const FILE = "/file.ts";
 
-const ch = (name: string) => channelName(FILE, name);
 const rendererIpcCall = (name: string) =>
   `window.__ea[${JSON.stringify(name)}](...args)`;
-
-describe("channelPrefix", () => {
-  test("transform() with prefix includes prefixed channels in handlers (file-level)", () => {
-    const input = `
-"use node";
-
-export async function getUser() {
-  return {};
-}
-
-export async function deleteUser() {
-  return {};
-}
-`;
-    const withPrefix = transform(input, FILE, "my-app:");
-    const withoutPrefix = transform(input, FILE);
-    expect(withPrefix?.handlers).toEqual(
-      withoutPrefix?.handlers.map((h) => `my-app:${h}`),
-    );
-  });
-
-  test("transform() with prefix includes prefixed channels in handlers (function-level)", () => {
-    const input = `
-export async function getUser() {
-  "use node";
-  return {};
-}
-
-export async function notMarked() {
-  return {};
-}
-`;
-    const withPrefix = transform(input, FILE, "pfx:");
-    const withoutPrefix = transform(input, FILE);
-    expect(withPrefix?.handlers).toEqual(
-      withoutPrefix?.handlers.map((h) => `pfx:${h}`),
-    );
-  });
-});
 
 describe("transform", () => {
   describe("file top-level directive", () => {
@@ -422,7 +388,7 @@ export async function getUser(id) {
       expect(transform(input, FILE)).toBeNull();
     });
 
-    test("transforms file-level directive and extracts handlers", () => {
+    test("transforms file-level directive", () => {
       const input = `
 "use node";
 
@@ -436,12 +402,11 @@ export const sum = async (a, b) => {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([ch("getUser"), ch("sum")]);
-      expect(result?.code).toContain(rendererIpcCall("getUser"));
-      expect(result?.code).toContain(rendererIpcCall("sum"));
+      expect(result).toContain(rendererIpcCall("getUser"));
+      expect(result).toContain(rendererIpcCall("sum"));
     });
 
-    test("transforms function-level directive and extracts only marked handlers", () => {
+    test("transforms function-level directive for only marked functions", () => {
       const input = `\
 export async function noDirective() {
   return 1;
@@ -459,14 +424,8 @@ export const arrowDirective = async (x) => {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([
-        ch("withDirective"),
-        ch("arrowDirective"),
-      ]);
-      // noDirective should NOT be in handlers
-      expect(result?.handlers).not.toContain(ch("noDirective"));
-      // noDirective should remain untransformed in code
-      expect(result?.code).toContain("return 1;");
+      // noDirective should NOT be transformed
+      expect(result).toContain("return 1;");
     });
 
     test("file-level throws on sync exported function", () => {
@@ -533,7 +492,7 @@ export async function asyncFunc() {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([ch("asyncFunc")]);
+      expect(result).toContain(rendererIpcCall("asyncFunc"));
     });
 
     test("function-level extracts sync exported functions with directive", () => {
@@ -545,7 +504,7 @@ export function getData() {
 `;
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
-      expect(result?.handlers).toEqual([ch("getData")]);
+      expect(result).toContain(rendererIpcCall("getData"));
     });
 
     test("handler names match IPC channels in generated code", () => {
@@ -563,12 +522,8 @@ export async function getFile() {
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
       // Channel strings must NOT appear in renderer output — they are hidden in the preload
-      for (const channel of result?.handlers ?? []) {
-        expect(result?.code).not.toContain(JSON.stringify(channel));
-      }
-      // Instead, named function calls appear
-      expect(result?.code).toContain(rendererIpcCall("getUser"));
-      expect(result?.code).toContain(rendererIpcCall("getFile"));
+      expect(result).toContain(rendererIpcCall("getUser"));
+      expect(result).toContain(rendererIpcCall("getFile"));
     });
   });
 });
@@ -655,20 +610,54 @@ export async function doWork() {
   });
 });
 
-describe("generateHandlerModule", () => {
-  test("returns a comment when registry is empty", () => {
-    const result = generateHandlerModule(new Map());
-    expect(result).toBe("// electron-actions: no handlers registered\n");
+describe("generateChannelsModule", () => {
+  test("empty registry produces an empty default export", () => {
+    const result = generateChannelsModule(new Map());
+    expect(result).toBe("export default {};");
   });
 
-  test("generates ipcMain.handle call for a single handler", () => {
+  test("generates fnName → channel entries", () => {
     const channel = channelName("/src/api.ts", "getUser");
     const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateHandlerModule(registry);
-    expect(result).toContain(`import { ipcMain } from "electron"`);
-    expect(result).toContain(`import * as _ea0 from "ea-raw:/src/api.ts"`);
-    expect(result).toContain(`ipcMain.handle(${JSON.stringify(channel)},`);
-    expect(result).toContain(`_ea0[${JSON.stringify("getUser")}](...args)`);
+    const result = generateChannelsModule(registry);
+    expect(result).toContain(`"getUser": "${channel}"`);
+  });
+
+  test("channel strings are present, function names are the keys (security boundary)", () => {
+    const channel = channelName("/src/api.ts", "getData");
+    const registry = new Map([["/src/api.ts", [channel]]]);
+    const result = generateChannelsModule(registry);
+    // Channel hash is the value — never visible in the renderer
+    expect(result).toContain(channel);
+    // Function name is the key — what the renderer accesses via window.__ea
+    expect(result).toContain(`"getData":`);
+  });
+});
+
+describe("generateHandlersMapModule", () => {
+  test("empty registry produces an empty default export", () => {
+    const result = generateHandlersMapModule(new Map(), (f) => f);
+    expect(result).toBe("export default {};");
+  });
+
+  test("generates an import and a channel → fn entry for a single handler", () => {
+    const channel = channelName("/src/api.ts", "getUser");
+    const registry = new Map([["/src/api.ts", [channel]]]);
+    const result = generateHandlersMapModule(registry, (f) => f);
+    expect(result).toContain(`import * as _ea0 from "/src/api.ts"`);
+    expect(result).toContain(`"${channel}": _ea0["getUser"]`);
+  });
+
+  test("resolveImport is called per file — allows injecting re-export prefix", () => {
+    const channel = channelName("/src/api.ts", "doWork");
+    const registry = new Map([["/src/api.ts", [channel]]]);
+    const result = generateHandlersMapModule(
+      registry,
+      (f) => `electron-actions:non-exported-actions:${f}`,
+    );
+    expect(result).toContain(
+      `import * as _ea0 from "electron-actions:non-exported-actions:/src/api.ts"`,
+    );
   });
 
   test("generates separate namespace imports for multiple files", () => {
@@ -678,63 +667,56 @@ describe("generateHandlerModule", () => {
       ["/src/users.ts", [ch1]],
       ["/src/posts.ts", [ch2]],
     ]);
-    const result = generateHandlerModule(registry);
-    expect(result).toContain(`import * as _ea0 from "ea-raw:/src/users.ts"`);
-    expect(result).toContain(`import * as _ea1 from "ea-raw:/src/posts.ts"`);
-    expect(result).toContain(
-      `ipcMain.handle(${JSON.stringify(ch1)}, (_event, ...args) => _ea0[${JSON.stringify("getUser")}](...args));`,
-    );
-    expect(result).toContain(
-      `ipcMain.handle(${JSON.stringify(ch2)}, (_event, ...args) => _ea1[${JSON.stringify("getPost")}](...args));`,
-    );
-  });
-
-  test("generates multiple handle calls for a file with multiple handlers", () => {
-    const ch1 = channelName("/src/api.ts", "getUser");
-    const ch2 = channelName("/src/api.ts", "deleteUser");
-    const registry = new Map([["/src/api.ts", [ch1, ch2]]]);
-    const result = generateHandlerModule(registry);
-    // Only one import for one file
-    expect((result.match(/import \* as/g) ?? []).length).toBe(1);
-    // But two ipcMain.handle registrations
-    expect((result.match(/ipcMain\.handle/g) ?? []).length).toBe(2);
+    const result = generateHandlersMapModule(registry, (f) => f);
+    expect(result).toContain(`import * as _ea0 from "/src/users.ts"`);
+    expect(result).toContain(`import * as _ea1 from "/src/posts.ts"`);
+    expect(result).toContain(`"${ch1}": _ea0["getUser"]`);
+    expect(result).toContain(`"${ch2}": _ea1["getPost"]`);
   });
 });
 
-describe("generatePreloadModule", () => {
-  test("returns empty channels object when registry is empty", () => {
-    const result = generatePreloadModule(new Map());
-    expect(result).toBe("export const channels = {};\n");
+describe("channelPrefix integration", () => {
+  const setup = (onTestFinished: (fn: () => void) => void) => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "ea-test-"));
+    onTestFinished(() => rmSync(tmpDir, { recursive: true, force: true }));
+    const srcDir = path.join(tmpDir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(
+      path.join(srcDir, "api.ts"),
+      `"use node";\nexport async function getUser() { return {}; }\n`,
+    );
+    return { root: tmpDir };
+  };
+
+  test("channelPrefix flows through scanForHandlers → generateHandlersMapModule (main env)", ({
+    onTestFinished,
+  }) => {
+    const { root } = setup(onTestFinished);
+    const prefix = "my-app:";
+    const registry = scanForHandlers(["src"], root, prefix);
+    const result = generateHandlersMapModule(registry, (f) => f);
+    // Every channel key in the output must start with the prefix
+    for (const channels of registry.values()) {
+      for (const channel of channels) {
+        expect(channel.startsWith(prefix)).toBe(true);
+        expect(result).toContain(JSON.stringify(channel));
+      }
+    }
   });
 
-  test("generates a channels entry for a single handler", () => {
-    const channel = channelName("/src/api.ts", "getUser");
-    const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generatePreloadModule(registry);
-    expect(result).toContain("export const channels = {");
-    expect(result).toContain(`"getUser": ${JSON.stringify(channel)}`);
-  });
-
-  test("generates entries for multiple handlers across files", () => {
-    const ch1 = channelName("/src/users.ts", "getUser");
-    const ch2 = channelName("/src/posts.ts", "getPost");
-    const registry = new Map([
-      ["/src/users.ts", [ch1]],
-      ["/src/posts.ts", [ch2]],
-    ]);
-    const result = generatePreloadModule(registry);
-    expect(result).toContain(`"getUser": ${JSON.stringify(ch1)}`);
-    expect(result).toContain(`"getPost": ${JSON.stringify(ch2)}`);
-  });
-
-  test("channel strings do not appear as values in renderer-facing output", () => {
-    // The function name is the key — channel string is opaque to the renderer
-    const channel = channelName("/src/api.ts", "getData");
-    const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generatePreloadModule(registry);
-    // Channel hash should be in the preload map (it's the value used by the bridge)
-    expect(result).toContain(channel);
-    // But function name is the key (what the renderer sees via window.__ea)
-    expect(result).toContain(`"getData":`);
+  test("channelPrefix flows through scanForHandlers → generateChannelsModule (preload env)", ({
+    onTestFinished,
+  }) => {
+    const { root } = setup(onTestFinished);
+    const prefix = "my-app:";
+    const registry = scanForHandlers(["src"], root, prefix);
+    const result = generateChannelsModule(registry);
+    // Every channel value in the output must start with the prefix
+    for (const channels of registry.values()) {
+      for (const channel of channels) {
+        expect(channel.startsWith(prefix)).toBe(true);
+        expect(result).toContain(JSON.stringify(channel));
+      }
+    }
   });
 });
