@@ -1,5 +1,5 @@
 /**
- * Generate code for the `electron-actions:channels` virtual module.
+ * Generate code for the `vite-plugin-electron-actions:channels` virtual module.
  *
  * Produces a default export of `[channelString, ...]` consumed by
  * `setupPreload()` in `src/preload/index.ts`. The full channel string
@@ -32,14 +32,14 @@ export function generateChannelsModule(
 }
 
 /**
- * Generate code for the `electron-actions:handlers-map` virtual module.
+ * Generate code for the `vite-plugin-electron-actions:handlers-map` virtual module.
  *
  * Produces a default export of `{ [channelString]: handlerFn }` consumed by
  * `setupMain()` in `src/main/index.ts`.
  *
  * @param registry - Map of absolute file path → channel strings
  * @param resolveImport - Returns the import specifier for a given file path
- *   (allows the caller to inject `electron-actions:non-exported-actions:` when needed)
+   *   (allows the caller to inject `vite-plugin-electron-actions:non-exported-actions:` when needed)
  */
 export function generateHandlersMapModule(
   registry: Map<string, string[]>,

@@ -1,4 +1,4 @@
-import channels from "electron-actions:channels";
+import channels from "vite-plugin-electron-actions:channels";
 import { contextBridge, ipcRenderer } from "electron";
 
 declare global {

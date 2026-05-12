@@ -1,4 +1,4 @@
-import handlers from "electron-actions:handlers-map";
+import handlers from "vite-plugin-electron-actions:handlers-map";
 import { ipcMain } from "electron";
 
 /**

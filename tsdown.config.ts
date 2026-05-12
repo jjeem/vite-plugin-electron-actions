@@ -5,6 +5,6 @@ export default defineConfig({
   dts: true,
   format: ["esm", "cjs"],
   deps: {
-    neverBundle: ["electron-actions:channels", "electron-actions:handlers-map"],
+    neverBundle: ["vite-plugin-electron-actions:channels", "vite-plugin-electron-actions:handlers-map"],
   },
 });

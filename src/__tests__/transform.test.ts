@@ -659,10 +659,10 @@ describe("generateHandlersMapModule", () => {
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateHandlersMapModule(
       registry,
-      (f) => `electron-actions:non-exported-actions:${f}`,
+      (f) => `vite-plugin-electron-actions:non-exported-actions:${f}`,
     );
     expect(result).toContain(
-      `import * as _ea0 from "electron-actions:non-exported-actions:/src/api.ts"`,
+      `import * as _ea0 from "vite-plugin-electron-actions:non-exported-actions:/src/api.ts"`,
     );
   });
 

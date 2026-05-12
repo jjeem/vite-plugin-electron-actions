@@ -83,7 +83,7 @@ export function extractHandlerNames(
 
 /**
  * Returns names of non-exported functions/arrows that have a "use node"
- * directive. These need to be re-exported via electron-actions:non-exported-actions:
+ * directive. These need to be re-exported via vite-plugin-electron-actions:non-exported-actions:
  * so that ipcMain.handle() can reference them via `import * as ns`.
  */
 export function extractNonExportedHandlerNames(program: Program): string[] {
