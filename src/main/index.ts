@@ -19,7 +19,7 @@ export function setupMain(): void {
           .includes("attempted to register a second handler for")
       ) {
         throw new Error(
-          `[vite-plugin-electron-actions]: "${channel}" is already registered. Ensure you call setupMain() only once in your main process.`,
+          `[electron-actions]: "${channel}" is already registered. Ensure you call setupMain() only once in your main process.`,
         );
       }
       throw err;
