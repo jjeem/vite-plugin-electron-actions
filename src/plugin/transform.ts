@@ -28,6 +28,7 @@ export { scanForHandlers } from "./scanner.js";
 export function transformFileLevelDirective(
   fileName: string,
   code: string,
+  channelPrefix = "",
 ): string {
   const { program } = parseSync(fileName, code);
   let newCode = "";
@@ -54,7 +55,7 @@ export function transformFileLevelDirective(
         throw new Error("Exported async function must have a name");
       }
       const name = declaration.id.name;
-      const key = channelName(fileName, name);
+      const key = channelName(fileName, name, channelPrefix);
       newCode = newCode.concat(`export ${ipcInvokerFn(name, key)}\n`);
     }
 
@@ -68,7 +69,7 @@ export function transformFileLevelDirective(
         if (isAsyncArrow || isAsyncFnExpr) {
           if (decl.id.type === "Identifier") {
             const name = decl.id.name;
-            const key = channelName(fileName, name);
+            const key = channelName(fileName, name, channelPrefix);
             newCode = newCode.concat(`export ${ipcInvokerArrow(name, key)}\n`);
           }
         } else {
@@ -87,6 +88,7 @@ export function transformFileLevelDirective(
 export function transformFunctionLevelDirective(
   fileName: string,
   code: string,
+  channelPrefix = "",
 ): string {
   const { program } = parseSync(fileName, code);
   const s = new MagicString(code);
@@ -114,7 +116,7 @@ export function transformFunctionLevelDirective(
             );
           }
           const name = declaration.id.name;
-          const key = channelName(fileName, name);
+          const key = channelName(fileName, name, channelPrefix);
           useNodeBodySpans.push({
             start: declaration.body.start,
             end: declaration.body.end,
@@ -140,7 +142,7 @@ export function transformFunctionLevelDirective(
               );
             }
             const name = decl.id.name;
-            const key = channelName(fileName, name);
+            const key = channelName(fileName, name, channelPrefix);
             useNodeBodySpans.push({
               start: decl.init.body.start,
               end: decl.init.body.end,
@@ -167,7 +169,7 @@ export function transformFunctionLevelDirective(
           throw new Error('Function with "use node" must have a name');
         }
         const name = node.id.name;
-        const key = channelName(fileName, name);
+        const key = channelName(fileName, name, channelPrefix);
         useNodeBodySpans.push({ start: node.body.start, end: node.body.end });
         s.overwrite(node.start, node.end, ipcInvokerFn(name, key));
       }
@@ -187,7 +189,7 @@ export function transformFunctionLevelDirective(
             );
           }
           const name = decl.id.name;
-          const key = channelName(fileName, name);
+          const key = channelName(fileName, name, channelPrefix);
           useNodeBodySpans.push({
             start: decl.init.body.start,
             end: decl.init.body.end,
@@ -281,7 +283,11 @@ export function transformFunctionLevelDirective(
  * Returns the transformed renderer stub code, or `null` if the file
  * contains no `"use node"` directives.
  */
-export function transform(code: string, fileName: string): string | null {
+export function transform(
+  code: string,
+  fileName: string,
+  channelPrefix = "",
+): string | null {
   const { program } = parseSync(fileName, code);
 
   const isFileLevel = checkFileLevelDirective(program);
@@ -290,8 +296,8 @@ export function transform(code: string, fileName: string): string | null {
   if (!isFileLevel && !isFunctionLevel) return null;
 
   if (isFileLevel) {
-    return transformFileLevelDirective(fileName, code);
+    return transformFileLevelDirective(fileName, code, channelPrefix);
   }
 
-  return transformFunctionLevelDirective(fileName, code);
+  return transformFunctionLevelDirective(fileName, code, channelPrefix);
 }

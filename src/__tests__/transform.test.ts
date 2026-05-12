@@ -614,29 +614,29 @@ export async function doWork() {
 describe("generateChannelsModule", () => {
   test("empty registry produces an empty default export", () => {
     const result = generateChannelsModule(new Map());
-    expect(result).toBe("export default {};");
+    expect(result).toBe("export default [];");
   });
 
-  test("generates { 'hash:fnName' → channel } entries", () => {
+  test("generates a channel array entry for a single handler", () => {
     const channel = channelName("/src/api.ts", "getUser");
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateChannelsModule(registry);
-    expect(result).toContain(
-      `${JSON.stringify(channel)}: ${JSON.stringify(channel)}`,
-    );
+    expect(result).toContain(JSON.stringify(channel));
   });
 
-  test("key excludes prefix, value retains it (security boundary)", () => {
+  test("full channel (including prefix) is in the array", () => {
     const prefix = "app:";
     const channel = channelName("/src/api.ts", "getData", prefix);
     const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateChannelsModule(registry, prefix);
-    const key = channel.slice(prefix.length); // "<hash>:getData" — no prefix
-    // Full channel (with prefix) is the value used on the wire
+    const result = generateChannelsModule(registry);
     expect(result).toContain(JSON.stringify(channel));
-    // Key does not include the prefix — prefix only appears in the wire value
-    expect(result).toContain(JSON.stringify(key));
-    expect(result).not.toMatch(new RegExp(`^\\s*"${prefix}`, "m"));
+  });
+
+  test("throws on duplicate channel strings", () => {
+    const channel = channelName("/src/api.ts", "getUser");
+    // Same channel appearing twice (simulates a hash collision)
+    const registry = new Map([["/src/api.ts", [channel, channel]]]);
+    expect(() => generateChannelsModule(registry)).toThrow(/collision/);
   });
 });
 

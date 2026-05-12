@@ -1,28 +1,34 @@
 /**
  * Generate code for the `electron-actions:channels` virtual module.
  *
- * Produces a default export of `{ [key]: channelString }` consumed by
- * `setupPreload()` in `src/preload/index.ts`.
+ * Produces a default export of `[channelString, ...]` consumed by
+ * `setupPreload()` in `src/preload/index.ts`. The full channel string
+ * (including any prefix) is used as both the `window.__ea` key and the
+ * `ipcRenderer.invoke` argument, keeping the two in sync automatically.
  *
- * The key is the channel string with the prefix stripped (`"<hash>:<fnName>"`),
- * so two functions with the same name in different files never collide in
- * `window.__ea`, and the prefix is not exposed to the renderer.
+ * Throws on duplicate channel strings (hash collision guard).
  */
 export function generateChannelsModule(
   registry: Map<string, string[]>,
-  channelPrefix = "",
 ): string {
-  if (registry.size === 0) return "export default {};";
+  if (registry.size === 0) return "export default [];";
 
+  const seen = new Set<string>();
   const entries: string[] = [];
+
   for (const channels of registry.values()) {
     for (const channel of channels) {
-      const key = channel.slice(channelPrefix.length);
-      entries.push(`  ${JSON.stringify(key)}: ${JSON.stringify(channel)},`);
+      if (seen.has(channel)) {
+        throw new Error(
+          `[electron-actions] Channel collision detected: "${channel}". This should never happen — please file a bug.`,
+        );
+      }
+      seen.add(channel);
+      entries.push(`  ${JSON.stringify(channel)},`);
     }
   }
 
-  return ["export default {", ...entries, "};"].join("\n");
+  return ["export default [", ...entries, "];"].join("\n");
 }
 
 /**

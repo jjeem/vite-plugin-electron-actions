@@ -51,7 +51,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
           // Guard for Vite < 6.3 where hook filters are not supported.
           if (!filter(id)) return null;
 
-          const result = transform(code, id);
+          const result = transform(code, id, options.channelPrefix ?? "");
           if (!result) return null;
 
           return { code: result, map: null };
@@ -158,7 +158,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
       load(id) {
         if (id === RESOLVED_CHANNELS_ID) {
           const registry = scanForHandlers(scanDirs, root, channelPrefix);
-          return generateChannelsModule(registry, channelPrefix);
+          return generateChannelsModule(registry);
         }
 
         return null;

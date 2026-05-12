@@ -1,5 +1,5 @@
 declare module "electron-actions:channels" {
-  const channels: Record<string, string>;
+  const channels: string[];
   export default channels;
 }
 
