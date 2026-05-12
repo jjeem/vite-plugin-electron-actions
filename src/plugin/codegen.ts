@@ -1,19 +1,24 @@
 /**
  * Generate code for the `electron-actions:channels` virtual module.
  *
- * Produces a default export of `{ [fnName]: channelString }` consumed by
+ * Produces a default export of `{ [key]: channelString }` consumed by
  * `setupPreload()` in `src/preload/index.ts`.
+ *
+ * The key is the channel string with the prefix stripped (`"<hash>:<fnName>"`),
+ * so two functions with the same name in different files never collide in
+ * `window.__ea`, and the prefix is not exposed to the renderer.
  */
 export function generateChannelsModule(
   registry: Map<string, string[]>,
+  channelPrefix = "",
 ): string {
   if (registry.size === 0) return "export default {};";
 
   const entries: string[] = [];
   for (const channels of registry.values()) {
     for (const channel of channels) {
-      const fnName = channel.slice(channel.lastIndexOf(":") + 1);
-      entries.push(`  ${JSON.stringify(fnName)}: ${JSON.stringify(channel)},`);
+      const key = channel.slice(channelPrefix.length);
+      entries.push(`  ${JSON.stringify(key)}: ${JSON.stringify(channel)},`);
     }
   }
 

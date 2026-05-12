@@ -22,7 +22,7 @@ import {
 const FILE = "/file.ts";
 
 const rendererIpcCall = (name: string) =>
-  `window.__ea[${JSON.stringify(name)}](...args)`;
+  `window.__ea[${JSON.stringify(channelName(FILE, name))}](...args)`;
 
 describe("transform", () => {
   describe("file top-level directive", () => {
@@ -617,21 +617,26 @@ describe("generateChannelsModule", () => {
     expect(result).toBe("export default {};");
   });
 
-  test("generates fnName → channel entries", () => {
+  test("generates { 'hash:fnName' → channel } entries", () => {
     const channel = channelName("/src/api.ts", "getUser");
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateChannelsModule(registry);
-    expect(result).toContain(`"getUser": "${channel}"`);
+    expect(result).toContain(
+      `${JSON.stringify(channel)}: ${JSON.stringify(channel)}`,
+    );
   });
 
-  test("channel strings are present, function names are the keys (security boundary)", () => {
-    const channel = channelName("/src/api.ts", "getData");
+  test("key excludes prefix, value retains it (security boundary)", () => {
+    const prefix = "app:";
+    const channel = channelName("/src/api.ts", "getData", prefix);
     const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateChannelsModule(registry);
-    // Channel hash is the value — never visible in the renderer
-    expect(result).toContain(channel);
-    // Function name is the key — what the renderer accesses via window.__ea
-    expect(result).toContain(`"getData":`);
+    const result = generateChannelsModule(registry, prefix);
+    const key = channel.slice(prefix.length); // "<hash>:getData" — no prefix
+    // Full channel (with prefix) is the value used on the wire
+    expect(result).toContain(JSON.stringify(channel));
+    // Key does not include the prefix — prefix only appears in the wire value
+    expect(result).toContain(JSON.stringify(key));
+    expect(result).not.toMatch(new RegExp(`^\\s*"${prefix}`, "m"));
   });
 });
 

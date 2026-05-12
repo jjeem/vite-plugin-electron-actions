@@ -6,6 +6,7 @@ import {
   parseSync,
 } from "oxc-parser";
 import { collectIdentifierPositions } from "./ast.js";
+import { channelName } from "./channel.js";
 import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
@@ -53,7 +54,8 @@ export function transformFileLevelDirective(
         throw new Error("Exported async function must have a name");
       }
       const name = declaration.id.name;
-      newCode = newCode.concat(`export ${ipcInvokerFn(name)}\n`);
+      const key = channelName(fileName, name);
+      newCode = newCode.concat(`export ${ipcInvokerFn(name, key)}\n`);
     }
 
     if (declaration?.type === "VariableDeclaration") {
@@ -66,7 +68,8 @@ export function transformFileLevelDirective(
         if (isAsyncArrow || isAsyncFnExpr) {
           if (decl.id.type === "Identifier") {
             const name = decl.id.name;
-            newCode = newCode.concat(`export ${ipcInvokerArrow(name)}\n`);
+            const key = channelName(fileName, name);
+            newCode = newCode.concat(`export ${ipcInvokerArrow(name, key)}\n`);
           }
         } else {
           // Non-async variable export (e.g. `export const x = 5`) — not allowed
@@ -111,11 +114,16 @@ export function transformFunctionLevelDirective(
             );
           }
           const name = declaration.id.name;
+          const key = channelName(fileName, name);
           useNodeBodySpans.push({
             start: declaration.body.start,
             end: declaration.body.end,
           });
-          s.overwrite(node.start, node.end, `export ${ipcInvokerFn(name)}`);
+          s.overwrite(
+            node.start,
+            node.end,
+            `export ${ipcInvokerFn(name, key)}`,
+          );
         }
       }
 
@@ -132,6 +140,7 @@ export function transformFunctionLevelDirective(
               );
             }
             const name = decl.id.name;
+            const key = channelName(fileName, name);
             useNodeBodySpans.push({
               start: decl.init.body.start,
               end: decl.init.body.end,
@@ -139,7 +148,7 @@ export function transformFunctionLevelDirective(
             s.overwrite(
               node.start,
               node.end,
-              `export ${ipcInvokerArrow(name)}`,
+              `export ${ipcInvokerArrow(name, key)}`,
             );
           }
         }
@@ -158,8 +167,9 @@ export function transformFunctionLevelDirective(
           throw new Error('Function with "use node" must have a name');
         }
         const name = node.id.name;
+        const key = channelName(fileName, name);
         useNodeBodySpans.push({ start: node.body.start, end: node.body.end });
-        s.overwrite(node.start, node.end, ipcInvokerFn(name));
+        s.overwrite(node.start, node.end, ipcInvokerFn(name, key));
       }
     }
 
@@ -177,11 +187,12 @@ export function transformFunctionLevelDirective(
             );
           }
           const name = decl.id.name;
+          const key = channelName(fileName, name);
           useNodeBodySpans.push({
             start: decl.init.body.start,
             end: decl.init.body.end,
           });
-          s.overwrite(node.start, node.end, ipcInvokerArrow(name));
+          s.overwrite(node.start, node.end, ipcInvokerArrow(name, key));
         }
       }
     }

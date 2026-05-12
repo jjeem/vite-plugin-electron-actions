@@ -158,7 +158,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
       load(id) {
         if (id === RESOLVED_CHANNELS_ID) {
           const registry = scanForHandlers(scanDirs, root, channelPrefix);
-          return generateChannelsModule(registry);
+          return generateChannelsModule(registry, channelPrefix);
         }
 
         return null;
