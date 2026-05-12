@@ -20,7 +20,7 @@ export function generateChannelsModule(
     for (const channel of channels) {
       if (seen.has(channel)) {
         throw new Error(
-          `[electron-actions] Channel collision detected: "${channel}". This should never happen — please file a bug.`,
+          `[vite-plugin-electron-actions] Channel collision detected: "${channel}". This should never happen — please file a bug.`,
         );
       }
       seen.add(channel);

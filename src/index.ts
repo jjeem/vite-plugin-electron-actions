@@ -167,7 +167,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   throw new Error(
-    `[electron-actions] Unknown env: "${env}". Must be "renderer", "main", or "preload".`,
+    `[vite-plugin-electron-actions] Unknown env: "${env}". Must be "renderer", "main", or "preload".`,
   );
 }
 

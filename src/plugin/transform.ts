@@ -41,14 +41,14 @@ export function transformFileLevelDirective(
     // Re-exports: `export { foo }` or `export { foo } from "..."` — not allowed
     if (!declaration && node.specifiers && node.specifiers.length > 0) {
       throw new Error(
-        `[electron-actions] File-level "use node" does not allow re-exports (\`export { ... }\`). Found in ${fileName}.`,
+        `[vite-plugin-electron-actions] File-level "use node" does not allow re-exports (\`export { ... }\`). Found in ${fileName}.`,
       );
     }
 
     if (declaration?.type === "FunctionDeclaration") {
       if (!declaration.async) {
         throw new Error(
-          `[electron-actions] File-level "use node" only allows async function exports. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+          `[vite-plugin-electron-actions] File-level "use node" only allows async function exports. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
         );
       }
       if (!declaration.id || declaration.id.type !== "Identifier") {
@@ -75,7 +75,7 @@ export function transformFileLevelDirective(
         } else {
           // Non-async variable export (e.g. `export const x = 5`) — not allowed
           throw new Error(
-            `[electron-actions] File-level "use node" only allows async function exports. Found non-async export \`${decl.id.type === "Identifier" ? decl.id.name : "(unknown)"}\` in ${fileName}.`,
+            `[vite-plugin-electron-actions] File-level "use node" only allows async function exports. Found non-async export \`${decl.id.type === "Identifier" ? decl.id.name : "(unknown)"}\` in ${fileName}.`,
           );
         }
       }
@@ -107,7 +107,7 @@ export function transformFunctionLevelDirective(
         if (hasUseNodeDirective(declaration.body)) {
           if (!declaration.async) {
             throw new Error(
-              `[electron-actions] Function-level "use node" only allows async functions. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+              `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
             );
           }
           if (!declaration.id || declaration.id.type !== "Identifier") {
@@ -138,7 +138,7 @@ export function transformFunctionLevelDirective(
           ) {
             if (!decl.init.async) {
               throw new Error(
-                `[electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
+                `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
               );
             }
             const name = decl.id.name;
@@ -162,7 +162,7 @@ export function transformFunctionLevelDirective(
       if (hasUseNodeDirective(node.body)) {
         if (!node.async) {
           throw new Error(
-            `[electron-actions] Function-level "use node" only allows async functions. Found sync function \`${node.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+            `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync function \`${node.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
           );
         }
         if (!node.id || node.id.type !== "Identifier") {
@@ -185,7 +185,7 @@ export function transformFunctionLevelDirective(
         ) {
           if (!decl.init.async) {
             throw new Error(
-              `[electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
+              `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
             );
           }
           const name = decl.id.name;
