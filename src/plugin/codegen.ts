@@ -39,7 +39,7 @@ export function generateChannelsModule(
  *
  * @param registry - Map of absolute file path → channel strings
  * @param resolveImport - Returns the import specifier for a given file path
-   *   (allows the caller to inject `vite-plugin-electron-actions:non-exported-actions:` when needed)
+ *   (allows the caller to inject `vite-plugin-electron-actions:non-exported-actions:` when needed)
  */
 export function generateHandlersMapModule(
   registry: Map<string, string[]>,

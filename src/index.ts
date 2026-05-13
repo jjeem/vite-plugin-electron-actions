@@ -29,7 +29,8 @@ const RESOLVED_CHANNELS_ID = "\0vite-plugin-electron-actions-channels";
 // that ipcMain.handle() can reference them. The main plugin has no transform
 // hook so no bypass guard is needed.
 const RE_EXPORT_PREFIX = "vite-plugin-electron-actions:non-exported-actions:";
-const RESOLVED_RE_EXPORT_PREFIX = "\0vite-plugin-electron-actions:non-exported-actions:";
+const RESOLVED_RE_EXPORT_PREFIX =
+  "\0vite-plugin-electron-actions:non-exported-actions:";
 
 // ── Plugin ─────────────────────────────────────────────────────
 
