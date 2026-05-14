@@ -8,7 +8,7 @@ A Vite plugin that lets you mark functions with a `"use node"` directive so they
 ## Installation
 
 ```bash
-npm install vite-plugin-electron-actions
+npm install -D vite-plugin-electron-actions
 ```
 
 ## Setup
