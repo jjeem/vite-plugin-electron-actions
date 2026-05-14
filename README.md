@@ -122,6 +122,8 @@ This exposes `window.__ea` via `contextBridge.exposeInMainWorld` as an object of
 
 Place `"use node"` inside a function body. Only that function becomes an IPC call — everything else in the file is left untouched. Works on both exported and non-exported functions.
 
+The function **must be `async`** — a sync function with `"use node"` is a build error.
+
 Imports used **exclusively** inside `"use node"` bodies are automatically removed from the renderer output.
 
 ```typescript
@@ -135,7 +137,7 @@ const writeToFile = async () => {
 }
 
 // This stays in the renderer
-export function setupCounter(el: HTMLButtonElement) {
+export function setupFile(el: HTMLButtonElement) {
   el.addEventListener("click", () => writeToFile())
 }
 ```
@@ -159,14 +161,31 @@ export async function createUser(name: string) {
 }
 ```
 
-**Constraints in file-level mode** — the following will throw a build error:
+---
 
-- Sync function exports: `export function foo() {}`
-- Non-async variable exports: `export const x = 5`
-- Class exports: `export class Foo {}`
+## Rules
+
+These rules apply regardless of whether you use file-level or function-level `"use node"`:
+
+- **`async` is required.** Every `"use node"` function must be declared `async`. A sync function with the directive is a build error.
+- **Top-level only.** Only top-level function declarations and variable declarations are processed. Functions nested inside blocks, conditionals, loops, or other functions are silently ignored — the directive has no effect there.
+
+Additional constraints in **file-level** mode (any of these is a build error):
+
+- Sync function/arrow-function exports: `export function foo() {}`
 - Re-exports: `export { foo }`
 
-Type/interface exports (`export type Foo`, `export interface Bar`) are silently stripped.
+Other exports (`export const x = 5`) are silently stripped from the Renderer bundle only.
+
+---
+
+## Security
+
+`"use node"` handlers run in the main process and have full Node.js access. Their arguments arrive over IPC from the renderer, which is a web context — if the renderer is ever compromised (e.g. via XSS or a malicious dependency), an attacker can call any handler with arbitrary arguments.
+
+- **Validate all inputs.** Check argument count, types, and value ranges before acting on them. Never assume the caller passed well-formed data.
+- **Apply access control where needed.** If a handler performs a sensitive operation (filesystem writes, network requests, spawning processes), add appropriate checks rather than relying on the renderer to gate access.
+- **Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing — but this does not protect against argument manipulation.
 
 ---
 
@@ -233,16 +252,16 @@ export async function getUser(id: string) {
   return db.users.findUnique({ where: { id } })
 }
 
-// After (renderer bundle) — channel strings are never present here
+// After (renderer bundle)
 export async function getUser(...args) {
-  return await window.__ea["getUser"](...args)
+  return await window.__ea["a3f2b1c4:getUser"](...args)
 }
 ```
 
 **`setupMain()` — generated at build time**:
 
 ```typescript
-// electron-actions:handlers-map (generated — data only)
+// vite-plugin-electron-actions:handlers-map (generated — data only)
 import * as _ea0 from "/abs/path/src/api.ts"
 
 export default {
@@ -255,15 +274,13 @@ export default {
 **`setupPreload()` — generated at build time**:
 
 ```typescript
-// electron-actions:channels (generated — data only)
-export default {
-  "getUser": "a3f2b1c4:getUser",
-}
+// vite-plugin-electron-actions:channels (generated — data only)
+export default [
+  "a3f2b1c4:getUser",
+]
 ```
 
-`setupPreload()` in `src/preload/index.ts` iterates this map and wires up `contextBridge.exposeInMainWorld("__ea", api)`.
-
-Channel strings are only ever present in the preload and main process bundles — never in the renderer.
+`setupPreload()` in `src/preload/index.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("__ea", api)`.
 
 ### IPC channel names
 
