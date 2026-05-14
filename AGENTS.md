@@ -79,7 +79,7 @@ electron-actions/
 ├── src/
 │   ├── index.ts              # Vite plugin entry: electronActions({ env }), three env-specific branches
 │   ├── types.ts              # ElectronActionsOptions type (env field required)
-│   ├── virtual.d.ts          # Ambient type declarations for electron-actions:channels and electron-actions:handlers-map
+│   ├── virtual.d.ts          # Ambient type declarations for vite-plugin-electron-actions:channels (string[]) and vite-plugin-electron-actions:handlers-map
 │   ├── plugin/
 │   │   ├── ast.ts            # AST utilities (collectIdentifierPositions)
 │   │   ├── channel.ts        # channelName() — derives IPC channel from file path, function name, and optional prefix
@@ -90,9 +90,9 @@ electron-actions/
 │   │   ├── scanner.ts        # scanForHandlers() — filesystem scan for "use node" files
 │   │   └── transform.ts      # transform(), transformFileLevelDirective(), transformFunctionLevelDirective()
 │   ├── main/
-│   │   └── index.ts          # setupMain() — real impl; imports electron-actions:handlers-map
+│   │   └── index.ts          # setupMain() — real impl; imports vite-plugin-electron-actions:handlers-map
 │   └── preload/
-│       └── index.ts          # setupPreload() + Window.__ea global type; imports electron-actions:channels
+│       └── index.ts          # setupPreload() + Window.__ea global type; imports vite-plugin-electron-actions:channels
 ├── src/__tests__/
 │   └── transform.test.ts     # vitest tests covering transform, directives, and codegen
 ├── dist/                     # Built output (gitignored)
@@ -112,7 +112,7 @@ electron-actions/
 
 Two modes of marking server-side (Node.js) code:
 
-**File-level**: `"use node"` at the top of the file. All exported async functions become IPC calls. Only async function/arrow exports are allowed — sync exports, re-exports (`export { foo }`), classes, and non-async variables throw an error. Type/interface exports are silently stripped.
+**File-level**: `"use node"` at the top of the file. All exported async functions become IPC calls. Sync function exports and re-exports (`export { foo }`) throw a build error. Other exports are silently stripped.
 
 ```ts
 "use node"
@@ -122,7 +122,7 @@ export async function getUser(id: string) {
 }
 ```
 
-**Function-level**: `"use node"` inside individual function bodies. Only those functions become stubs (ipcInvokers); everything else is preserved. Works on exported AND non-exported functions. Imports used exclusively inside `"use node"` bodies are automatically removed from the renderer output.
+**Function-level**: `"use node"` inside individual function bodies. Only those functions become stubs (ipcInvokers); everything else is preserved. Works on exported AND non-exported functions. The function must be `async` — sync functions with the directive throw a build error. Imports used exclusively inside `"use node"` bodies are automatically removed from the renderer output.
 
 ```ts
 const writeToFile = async () => {
@@ -131,7 +131,7 @@ const writeToFile = async () => {
 }
 ```
 
-### Virtual Module: `electron-actions:handlers-map`
+### Virtual Module: `vite-plugin-electron-actions:handlers-map`
 
 Intercepted by the `env:"main"` plugin. Generates a data-only default export of
 `{ [channelString]: handlerFn }` by importing all handler files. `setupMain()` in
@@ -144,13 +144,14 @@ setupMain();
 
 The plugin scans `scanDirs` (default `["src"]`) at build time to discover all handlers.
 Non-exported `"use node"` functions are automatically re-exported via the internal
-`electron-actions:non-exported-actions:` prefix so `ipcMain.handle()` can reference them.
+`vite-plugin-electron-actions:non-exported-actions:` prefix so `ipcMain.handle()` can reference them.
 
-### Virtual Module: `electron-actions:channels`
+### Virtual Module: `vite-plugin-electron-actions:channels`
 
 Intercepted by the `env:"preload"` plugin. Generates a data-only default export of
-`{ [fnName]: channelString }`. `setupPreload()` in `src/preload/index.ts` iterates this
-map and wires up `contextBridge.exposeInMainWorld("__ea", api)`:
+`[channelString, ...]` (an array). The full channel string (including any prefix) is used
+as both the `window.__ea` key and the `ipcRenderer.invoke` argument. `setupPreload()` in
+`src/preload/index.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("__ea", api)`:
 
 ```ts
 import { setupPreload } from "vite-plugin-electron-actions/preload";
@@ -208,9 +209,9 @@ export default defineConfig({
 
 ### Virtual Module Prefixes
 
-- `electron-actions:handlers-map` — intercepted by `env:"main"` plugin; generates a data-only `{ [channel]: handlerFn }` default export consumed by `setupMain()`
-- `electron-actions:channels` — intercepted by `env:"preload"` plugin; generates a data-only `{ [fnName]: channelString }` default export consumed by `setupPreload()`
-- `electron-actions:non-exported-actions:<absolute-path>` — internal only; serves original source with additional `export { name }` for non-exported `"use node"` functions so `ipcMain.handle()` can reference them
+- `vite-plugin-electron-actions:handlers-map` — intercepted by `env:"main"` plugin; generates a data-only `{ [channel]: handlerFn }` default export consumed by `setupMain()`
+- `vite-plugin-electron-actions:channels` — intercepted by `env:"preload"` plugin; generates a data-only `[channelString, ...]` array default export consumed by `setupPreload()`
+- `vite-plugin-electron-actions:non-exported-actions:<absolute-path>` — internal only; serves original source with additional `export { name }` for non-exported `"use node"` functions so `ipcMain.handle()` can reference them
 
 ## Dependencies
 
