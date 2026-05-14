@@ -72,11 +72,6 @@ export function transformFileLevelDirective(
             const key = channelName(fileName, name, channelPrefix);
             newCode = newCode.concat(`export ${ipcInvokerArrow(name, key)}\n`);
           }
-        } else {
-          // Non-async variable export (e.g. `export const x = 5`) — not allowed
-          throw new Error(
-            `[vite-plugin-electron-actions] File-level "use node" only allows async function exports. Found non-async export \`${decl.id.type === "Identifier" ? decl.id.name : "(unknown)"}\` in ${fileName}.`,
-          );
         }
       }
     }

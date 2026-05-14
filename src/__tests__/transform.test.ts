@@ -469,15 +469,20 @@ export async function asyncFunc() {
       expect(() => transform(input, FILE)).toThrow(/re-exports/);
     });
 
-    test("file-level throws on non-async variable export", () => {
+    test("file-level silently skips non-async variable export", () => {
       const input = `
 "use node";
 
 export const x = 5;
+
+export async function asyncFunc() {
+  return 3;
+}
 `;
-      expect(() => transform(input, FILE)).toThrow(
-        /only allows async function exports/,
-      );
+      const result = transform(input, FILE);
+      expect(result).not.toBeNull();
+      expect(result).not.toContain("export const x");
+      expect(result).toContain(rendererIpcCall("asyncFunc"));
     });
 
     test("file-level silently strips type/interface exports", () => {
