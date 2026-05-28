@@ -421,7 +421,7 @@ export function transformForMain(
   s.prepend(`import { ipcMain as __eaIpcMain } from "electron"\n`);
   for (const { name, channel } of handlers) {
     s.append(
-      `\n__eaIpcMain.handle(${JSON.stringify(channel)}, (_event, ...args) => ${name}(...args))`,
+      `\n__eaIpcMain.handle("${channel}", (_event, ...args) => ${name}(...args))`,
     );
   }
 

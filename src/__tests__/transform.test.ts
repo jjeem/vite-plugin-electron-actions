@@ -23,7 +23,7 @@ import {
 const FILE = "/file.ts";
 
 const rendererIpcCall = (name: string) =>
-  `window.__ea[${JSON.stringify(channelName(FILE, name))}](...args)`;
+  `window.__ea["${channelName(FILE, name)}"](...args)`;
 
 describe("transform", () => {
   describe("file top-level directive", () => {
@@ -627,7 +627,7 @@ describe("generateChannelsModule", () => {
     const channel = channelName("/src/api.ts", "getUser");
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateChannelsModule(registry);
-    expect(result).toContain(JSON.stringify(channel));
+    expect(result).toContain(`"${channel}"`);
   });
 
   test("full channel (including prefix) is in the array", () => {
@@ -635,7 +635,7 @@ describe("generateChannelsModule", () => {
     const channel = channelName("/src/api.ts", "getData", prefix);
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateChannelsModule(registry);
-    expect(result).toContain(JSON.stringify(channel));
+    expect(result).toContain(`"${channel}"`);
   });
 
   test("throws on duplicate channel strings", () => {
@@ -705,7 +705,7 @@ export async function getUser(id) {
     );
     // handle call appended
     expect(result).toContain(
-      `__eaIpcMain.handle(${JSON.stringify(channelName(FILE, "getUser"))}, (_event, ...args) => getUser(...args))`,
+      `__eaIpcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
     );
     // directive stripped
     expect(result).not.toContain('"use node"');
@@ -723,7 +723,7 @@ export const sum = async (a, b) => {
     expect(result).not.toBeNull();
     expect(result).toContain("return a + b");
     expect(result).toContain(
-      `__eaIpcMain.handle(${JSON.stringify(channelName(FILE, "sum"))}, (_event, ...args) => sum(...args))`,
+      `__eaIpcMain.handle("${channelName(FILE, "sum")}", (_event, ...args) => sum(...args))`,
     );
   });
 
@@ -738,7 +738,7 @@ export async function getUser(id) {
     expect(result).not.toBeNull();
     expect(result).toContain("return { id }");
     expect(result).toContain(
-      `__eaIpcMain.handle(${JSON.stringify(channelName(FILE, "getUser"))}, (_event, ...args) => getUser(...args))`,
+      `__eaIpcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
     );
   });
 
@@ -753,7 +753,7 @@ async function writeLog(msg) {
     expect(result).not.toBeNull();
     expect(result).toContain("return msg");
     expect(result).toContain(
-      `__eaIpcMain.handle(${JSON.stringify(channelName(FILE, "writeLog"))}, (_event, ...args) => writeLog(...args))`,
+      `__eaIpcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
     );
   });
 
@@ -771,7 +771,7 @@ export async function withoutDirective() {
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
     expect(result).toContain(
-      `__eaIpcMain.handle(${JSON.stringify(channelName(FILE, "withDirective"))}, (_event, ...args) => withDirective(...args))`,
+      `__eaIpcMain.handle("${channelName(FILE, "withDirective")}", (_event, ...args) => withDirective(...args))`,
     );
     expect(result).not.toContain("withoutDirective(...args)");
   });
@@ -786,7 +786,7 @@ const writeLog = async (msg) => {
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
     expect(result).toContain(
-      `__eaIpcMain.handle(${JSON.stringify(channelName(FILE, "writeLog"))}, (_event, ...args) => writeLog(...args))`,
+      `__eaIpcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
     );
   });
 
@@ -802,7 +802,7 @@ export async function getUser() {
     const result = transformForMain(FILE, input, prefix);
     expect(result).not.toBeNull();
     expect(result).toContain(
-      `__eaIpcMain.handle(${JSON.stringify(channelName(FILE, "getUser", prefix))}, (_event, ...args) => getUser(...args))`,
+      `__eaIpcMain.handle("${channelName(FILE, "getUser", prefix)}", (_event, ...args) => getUser(...args))`,
     );
   });
 });
@@ -829,7 +829,7 @@ describe("channelPrefix integration", () => {
     const result = generateHandlersLoaderModule(registry);
     // Loader module imports real file paths — channels are in the transformed files
     for (const filePath of registry.keys()) {
-      expect(result).toContain(JSON.stringify(filePath));
+      expect(result).toContain(`"${filePath}"`);
     }
   });
 
@@ -844,7 +844,7 @@ describe("channelPrefix integration", () => {
     for (const channels of registry.values()) {
       for (const channel of channels) {
         expect(channel.startsWith(prefix)).toBe(true);
-        expect(result).toContain(JSON.stringify(channel));
+        expect(result).toContain(`"${channel}"`);
       }
     }
   });

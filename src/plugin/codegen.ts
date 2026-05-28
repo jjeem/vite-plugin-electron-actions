@@ -24,7 +24,7 @@ export function generateChannelsModule(
         );
       }
       seen.add(channel);
-      entries.push(`  ${JSON.stringify(channel)},`);
+      entries.push(`  "${channel}",`);
     }
   }
 
@@ -45,6 +45,6 @@ export function generateHandlersLoaderModule(
   if (registry.size === 0) return "";
 
   return [...registry.keys()]
-    .map((filePath) => `import ${JSON.stringify(filePath)}`)
+    .map((filePath) => `import "${filePath}"`)
     .join("\n");
 }
