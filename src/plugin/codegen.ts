@@ -32,38 +32,19 @@ export function generateChannelsModule(
 }
 
 /**
- * Generate code for the `vite-plugin-electron-actions:handlers-map` virtual module.
+ * Generate code for the `vite-plugin-electron-actions:load-handlers` virtual module.
  *
- * Produces a default export of `{ [channelString]: handlerFn }` consumed by
- * `setupMain()` in `src/main/index.ts`.
- *
- * @param registry - Map of absolute file path → channel strings
- * @param resolveImport - Returns the import specifier for a given file path
- *   (allows the caller to inject `vite-plugin-electron-actions:non-exported-actions:` when needed)
+ * Produces a list of side-effect imports — one per handler file. Importing
+ * this module causes every `"use node"` file to be loaded, which triggers
+ * the `ipcMain.handle()` calls that the plugin injects directly into each
+ * file via `transformForMain()`.
  */
-export function generateHandlersMapModule(
+export function generateHandlersLoaderModule(
   registry: Map<string, string[]>,
-  resolveImport: (filePath: string) => string,
 ): string {
-  if (registry.size === 0) return "export default {};";
+  if (registry.size === 0) return "";
 
-  const imports: string[] = [];
-  const entries: string[] = [];
-  let counter = 0;
-
-  for (const [fileId, channels] of registry) {
-    const ns = `_ea${counter++}`;
-    imports.push(
-      `import * as ${ns} from ${JSON.stringify(resolveImport(fileId))};`,
-    );
-
-    for (const channel of channels) {
-      const fnName = channel.slice(channel.lastIndexOf(":") + 1);
-      entries.push(
-        `  ${JSON.stringify(channel)}: ${ns}[${JSON.stringify(fnName)}],`,
-      );
-    }
-  }
-
-  return [...imports, "", "export default {", ...entries, "};"].join("\n");
+  return [...registry.keys()]
+    .map((filePath) => `import ${JSON.stringify(filePath)}`)
+    .join("\n");
 }

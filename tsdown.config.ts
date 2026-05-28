@@ -7,7 +7,7 @@ export default defineConfig({
   deps: {
     neverBundle: [
       "vite-plugin-electron-actions:channels",
-      "vite-plugin-electron-actions:handlers-map",
+      "vite-plugin-electron-actions:load-handlers",
     ],
   },
 });

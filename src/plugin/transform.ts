@@ -20,7 +20,6 @@ export {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
 } from "./directives.js";
-export { extractNonExportedHandlerNames } from "./handlers.js";
 export { scanForHandlers } from "./scanner.js";
 
 // ── Renderer transforms ────────────────────────────────────────
@@ -265,6 +264,165 @@ export function transformFunctionLevelDirective(
         }
       }
     }
+  }
+
+  return s.toString();
+}
+
+// ── Main process transform ─────────────────────────────────────
+
+/**
+ * Transform a `"use node"` file for the Electron main process build.
+ *
+ * Instead of replacing functions with IPC stubs (as the renderer transform
+ * does), this keeps the real implementations and appends an
+ * `ipcMain.handle()` call for each handler directly into the file.
+ *
+ * This means every `"use node"` file is its own self-registering module —
+ * side effects run exactly once regardless of how many times the file is
+ * imported, because the bundler deduplicates by module ID.
+ *
+ * The `vite-plugin-electron-actions:load-handlers` virtual module imports
+ * all handler files as side effects so that `setupMain()` triggers
+ * registration as part of the static module graph.
+ *
+ * Returns `null` if the file contains no `"use node"` directives.
+ */
+export function transformForMain(
+  fileName: string,
+  code: string,
+  channelPrefix = "",
+): string | null {
+  const { program } = parseSync(fileName, code);
+
+  const isFileLevel = checkFileLevelDirective(program);
+  const isFunctionLevel = checkFunctionLevelDirective(program);
+
+  if (!isFileLevel && !isFunctionLevel) return null;
+
+  const s = new MagicString(code);
+  const handlers: Array<{ name: string; channel: string }> = [];
+
+  if (isFileLevel) {
+    // Strip the "use node" directive string from the output
+    const directiveNode = program.body[0];
+    if (directiveNode) {
+      const end =
+        directiveNode.end < code.length && code[directiveNode.end] === "\n"
+          ? directiveNode.end + 1
+          : directiveNode.end;
+      s.remove(directiveNode.start, end);
+    }
+
+    for (const node of program.body) {
+      if (node.type !== "ExportNamedDeclaration") continue;
+      const { declaration } = node;
+
+      if (
+        declaration?.type === "FunctionDeclaration" &&
+        declaration.async &&
+        declaration.id?.type === "Identifier"
+      ) {
+        const name = declaration.id.name;
+        handlers.push({
+          name,
+          channel: channelName(fileName, name, channelPrefix),
+        });
+      }
+
+      if (declaration?.type === "VariableDeclaration") {
+        for (const decl of declaration.declarations) {
+          const init = decl.init;
+          const isAsyncArrow =
+            init?.type === "ArrowFunctionExpression" && init.async;
+          const isAsyncFnExpr =
+            init?.type === "FunctionExpression" && init.async;
+          if (
+            (isAsyncArrow || isAsyncFnExpr) &&
+            decl.id.type === "Identifier"
+          ) {
+            const name = decl.id.name;
+            handlers.push({
+              name,
+              channel: channelName(fileName, name, channelPrefix),
+            });
+          }
+        }
+      }
+    }
+  } else {
+    // Function-level: collect every function with a "use node" body,
+    // exported or not.
+    for (const node of program.body) {
+      if (node.type === "ExportNamedDeclaration") {
+        const { declaration } = node;
+
+        if (
+          declaration?.type === "FunctionDeclaration" &&
+          declaration.id?.type === "Identifier" &&
+          hasUseNodeDirective(declaration.body)
+        ) {
+          const name = declaration.id.name;
+          handlers.push({
+            name,
+            channel: channelName(fileName, name, channelPrefix),
+          });
+        }
+
+        if (declaration?.type === "VariableDeclaration") {
+          for (const decl of declaration.declarations) {
+            if (
+              decl.init?.type === "ArrowFunctionExpression" &&
+              decl.id.type === "Identifier" &&
+              hasUseNodeDirective(decl.init.body)
+            ) {
+              const name = decl.id.name;
+              handlers.push({
+                name,
+                channel: channelName(fileName, name, channelPrefix),
+              });
+            }
+          }
+        }
+      }
+
+      if (
+        node.type === "FunctionDeclaration" &&
+        node.id?.type === "Identifier" &&
+        hasUseNodeDirective(node.body)
+      ) {
+        const name = node.id.name;
+        handlers.push({
+          name,
+          channel: channelName(fileName, name, channelPrefix),
+        });
+      }
+
+      if (node.type === "VariableDeclaration") {
+        for (const decl of node.declarations) {
+          if (
+            decl.init?.type === "ArrowFunctionExpression" &&
+            decl.id.type === "Identifier" &&
+            hasUseNodeDirective(decl.init.body)
+          ) {
+            const name = decl.id.name;
+            handlers.push({
+              name,
+              channel: channelName(fileName, name, channelPrefix),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  if (handlers.length === 0) return null;
+
+  s.prepend(`import { ipcMain as __eaIpcMain } from "electron"\n`);
+  for (const { name, channel } of handlers) {
+    s.append(
+      `\n__eaIpcMain.handle(${JSON.stringify(channel)}, (_event, ...args) => ${name}(...args))`,
+    );
   }
 
   return s.toString();

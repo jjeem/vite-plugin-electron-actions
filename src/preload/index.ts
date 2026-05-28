@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from "electron";
 declare global {
   interface Window {
     __ea: Record<string, (...args: unknown[]) => Promise<unknown>>;
+    $$mainSetupPromise: (callback: (result: boolean) => void) => void;
   }
 }
 
@@ -19,4 +20,12 @@ export function setupPreload(): void {
     api[channel] = (...args) => ipcRenderer.invoke(channel, ...args);
   }
   contextBridge.exposeInMainWorld("__ea", api);
+  contextBridge.exposeInMainWorld(
+    "$$mainSetupPromise",
+    async (callback: (result: boolean) => void) => {
+      ipcRenderer.on("$$electron-actions:main-setup-complete", (_, result) => {
+        callback(result);
+      });
+    },
+  );
 }
