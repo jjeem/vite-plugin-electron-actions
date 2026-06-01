@@ -271,7 +271,7 @@ export function transformFunctionLevelDirective(
 
 // ── Reserved identifier guard ──────────────────────────────────
 
-const RESERVED_IPC_MAIN = "$vitePluginElectronActions_ipcMain"
+const RESERVED_IPC_MAIN = "$vitePluginElectronActions_ipcMain";
 
 /**
  * Throws if the user's source file already declares a binding whose local
@@ -288,7 +288,7 @@ function checkReservedIdentifierUsage(
         if (spec.local.name === RESERVED_IPC_MAIN) {
           throw new Error(
             `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your import in ${fileName}.`,
-          )
+          );
         }
       }
     }
@@ -301,7 +301,7 @@ function checkReservedIdentifierUsage(
         ) {
           throw new Error(
             `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your variable in ${fileName}.`,
-          )
+          );
         }
       }
     }
@@ -459,9 +459,7 @@ export function transformForMain(
 
   checkReservedIdentifierUsage(fileName, program);
 
-  s.prepend(
-    `import { ipcMain as ${RESERVED_IPC_MAIN} } from "electron"\n`,
-  );
+  s.prepend(`import { ipcMain as ${RESERVED_IPC_MAIN} } from "electron"\n`);
   for (const { name, channel } of handlers) {
     s.append(
       `\n${RESERVED_IPC_MAIN}.handle("${channel}", (_event, ...args) => ${name}(...args))`,
