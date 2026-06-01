@@ -701,11 +701,11 @@ export async function getUser(id) {
     expect(result).toContain("db.user.findUnique");
     // ipcMain import injected
     expect(result).toContain(
-      `import { ipcMain as __eaIpcMain } from "electron"`,
+      `import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"`,
     );
     // handle call appended
     expect(result).toContain(
-      `__eaIpcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
     );
     // directive stripped
     expect(result).not.toContain('"use node"');
@@ -723,7 +723,7 @@ export const sum = async (a, b) => {
     expect(result).not.toBeNull();
     expect(result).toContain("return a + b");
     expect(result).toContain(
-      `__eaIpcMain.handle("${channelName(FILE, "sum")}", (_event, ...args) => sum(...args))`,
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "sum")}", (_event, ...args) => sum(...args))`,
     );
   });
 
@@ -738,7 +738,7 @@ export async function getUser(id) {
     expect(result).not.toBeNull();
     expect(result).toContain("return { id }");
     expect(result).toContain(
-      `__eaIpcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
     );
   });
 
@@ -753,7 +753,7 @@ async function writeLog(msg) {
     expect(result).not.toBeNull();
     expect(result).toContain("return msg");
     expect(result).toContain(
-      `__eaIpcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
     );
   });
 
@@ -771,7 +771,7 @@ export async function withoutDirective() {
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
     expect(result).toContain(
-      `__eaIpcMain.handle("${channelName(FILE, "withDirective")}", (_event, ...args) => withDirective(...args))`,
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "withDirective")}", (_event, ...args) => withDirective(...args))`,
     );
     expect(result).not.toContain("withoutDirective(...args)");
   });
@@ -786,8 +786,66 @@ const writeLog = async (msg) => {
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
     expect(result).toContain(
-      `__eaIpcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
     );
+  });
+
+  test("throws when user imports a binding named $vitePluginElectronActions_ipcMain", () => {
+    const input = `\
+"use node";
+
+import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).toThrow(
+      /\$vitePluginElectronActions_ipcMain.*reserved/,
+    );
+  });
+
+  test("throws when user has a variable named $vitePluginElectronActions_ipcMain", () => {
+    const input = `\
+"use node";
+
+const $vitePluginElectronActions_ipcMain = "oops";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).toThrow(
+      /\$vitePluginElectronActions_ipcMain.*reserved/,
+    );
+  });
+
+  test("throws regardless of which module the conflicting import comes from", () => {
+    const input = `\
+"use node";
+
+import { something as $vitePluginElectronActions_ipcMain } from "some-other-lib";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).toThrow(
+      /\$vitePluginElectronActions_ipcMain.*reserved/,
+    );
+  });
+
+  test("does not throw when user imports ipcMain under a different alias", () => {
+    const input = `\
+"use node";
+
+import { ipcMain as myIpcMain } from "electron";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).not.toThrow();
   });
 
   test("channelPrefix flows through to handle calls", () => {
@@ -802,7 +860,7 @@ export async function getUser() {
     const result = transformForMain(FILE, input, prefix);
     expect(result).not.toBeNull();
     expect(result).toContain(
-      `__eaIpcMain.handle("${channelName(FILE, "getUser", prefix)}", (_event, ...args) => getUser(...args))`,
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser", prefix)}", (_event, ...args) => getUser(...args))`,
     );
   });
 });

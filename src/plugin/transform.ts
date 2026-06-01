@@ -269,6 +269,45 @@ export function transformFunctionLevelDirective(
   return s.toString();
 }
 
+// ── Reserved identifier guard ──────────────────────────────────
+
+const RESERVED_IPC_MAIN = "$vitePluginElectronActions_ipcMain"
+
+/**
+ * Throws if the user's source file already declares a binding whose local
+ * name collides with the identifier the plugin will inject. Checks both
+ * import specifiers and top-level variable declarations.
+ */
+function checkReservedIdentifierUsage(
+  fileName: string,
+  program: ReturnType<typeof parseSync>["program"],
+): void {
+  for (const node of program.body) {
+    if (node.type === "ImportDeclaration") {
+      for (const spec of node.specifiers ?? []) {
+        if (spec.local.name === RESERVED_IPC_MAIN) {
+          throw new Error(
+            `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your import in ${fileName}.`,
+          )
+        }
+      }
+    }
+
+    if (node.type === "VariableDeclaration") {
+      for (const decl of node.declarations) {
+        if (
+          decl.id.type === "Identifier" &&
+          decl.id.name === RESERVED_IPC_MAIN
+        ) {
+          throw new Error(
+            `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your variable in ${fileName}.`,
+          )
+        }
+      }
+    }
+  }
+}
+
 // ── Main process transform ─────────────────────────────────────
 
 /**
@@ -418,10 +457,14 @@ export function transformForMain(
 
   if (handlers.length === 0) return null;
 
-  s.prepend(`import { ipcMain as __eaIpcMain } from "electron"\n`);
+  checkReservedIdentifierUsage(fileName, program);
+
+  s.prepend(
+    `import { ipcMain as ${RESERVED_IPC_MAIN} } from "electron"\n`,
+  );
   for (const { name, channel } of handlers) {
     s.append(
-      `\n__eaIpcMain.handle("${channel}", (_event, ...args) => ${name}(...args))`,
+      `\n${RESERVED_IPC_MAIN}.handle("${channel}", (_event, ...args) => ${name}(...args))`,
     );
   }
 
