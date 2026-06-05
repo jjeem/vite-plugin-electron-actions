@@ -3,7 +3,8 @@
 A Vite plugin that lets you mark functions with a `"use node"` directive so they run in the Electron main process — similar to React `"use server"`. The plugin transforms marked functions into IPC calls in the renderer and automatically registers `ipcMain.handle()` calls in the main process.
 
 > [!CAUTION]
-> This package is in early development. The API and internal behavior are subject to frequent changes. Do not use in production without expecting breaking changes in any version.
+> This package is in early development. The API and internal behavior are subject to frequent changes. 
+> Do not use in production without expecting breaking changes in any version.
 
 ## Installation
 
@@ -30,7 +31,7 @@ export default defineConfig({
       {
         entry: "electron/main.ts",
         vite: {
-          plugins: [electronActions({ env: "main" })],
+          plugins: [electronActions({ env: "main", scanDirs: ["src"] })],
         },
         preload: {
           input: "electron/preload.ts",
@@ -89,15 +90,18 @@ export default defineConfig({
 
 ### Main process
 
-Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls:
+Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<boolean>` that resolves to `true` when all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
+
+Optionally pass a `windows` array — each `BrowserWindow` will receive a `$$electron-actions:main-setup-complete` IPC event once handlers are ready and the window finishes loading:
 
 ```typescript
 // electron/main.ts
-import { setupMain } from "vite-plugin-electron-actions/main"
+import { setupMain, mainSetupPromise, notifyWindows } from "vite-plugin-electron-actions/main"
 
-app.whenReady().then(() => {
-  setupMain()
-  // ...
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({ /* ... */ })
+  await setupMain({ windows: [win] })
+  // all ipcMain.handle() calls are now registered
 })
 ```
 
@@ -112,7 +116,7 @@ import { setupPreload } from "vite-plugin-electron-actions/preload"
 setupPreload()
 ```
 
-This exposes `window.__ea` via `contextBridge.exposeInMainWorld` as an object of individually named functions. Each function is locked to a single pre-determined IPC channel — the renderer cannot invoke arbitrary channels.
+This exposes `window.$$vitePluginElectronActions` via `contextBridge.exposeInMainWorld` as an object of individually named functions. Each function is locked to a single pre-determined IPC channel — the renderer cannot invoke arbitrary channels.
 
 ---
 
@@ -254,22 +258,34 @@ export async function getUser(id: string) {
 
 // After (renderer bundle)
 export async function getUser(...args) {
-  return await window.__ea["a3f2b1c4:getUser"](...args)
+  return await window.$$vitePluginElectronActions["a3f2b1c4:getUser"](...args)
 }
 ```
 
-**`setupMain()` — generated at build time**:
+**`setupMain()` — main process build**:
+
+The plugin transforms each `"use node"` file in the main process build to keep the real implementation and inject `ipcMain.handle()` calls directly into the file:
 
 ```typescript
-// vite-plugin-electron-actions:handlers-map (generated — data only)
-import * as _ea0 from "/abs/path/src/api.ts"
+// src/api.ts — after main-process transform
+import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"
+import { db } from "./db"
 
-export default {
-  "a3f2b1c4:getUser": _ea0["getUser"],
+export async function getUser(id: string) {
+  return db.users.findUnique({ where: { id } })
 }
+
+$vitePluginElectronActions_ipcMain.handle("a3f2b1c4:getUser", (_event, ...args) => getUser(...args))
 ```
 
-`setupMain()` in `src/main/index.ts` iterates this map and calls `ipcMain.handle()` for each entry.
+`vite-plugin-electron-actions:load-handlers` is a virtual module that contains one side-effect import per `"use node"` file. It is imported by `vite-plugin-electron-actions/main`
+
+```typescript
+// vite-plugin-electron-actions:load-handlers (generated)
+import "/abs/path/src/api.ts"
+```
+
+Because the `load-handlers` module is a **static** import of `vite-plugin-electron-actions/main`, all handler files are in the primary module graph and are evaluated synchronously at startup. Side effects run exactly once — the bundler deduplicates by module ID even if the file is also imported elsewhere in main.
 
 **`setupPreload()` — generated at build time**:
 
@@ -280,7 +296,7 @@ export default [
 ]
 ```
 
-`setupPreload()` in `src/preload/index.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("__ea", api)`.
+`setupPreload()` in `src/preload/index.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
 
 ### IPC channel names
 
