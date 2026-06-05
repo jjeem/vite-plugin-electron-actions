@@ -3,7 +3,8 @@
  *
  * Produces a default export of `[channelString, ...]` consumed by
  * `setupPreload()` in `src/preload/index.ts`. The full channel string
- * (including any prefix) is used as both the `window.__ea` key and the
+ * (including any prefix) is used as both the
+ * `window.$$vitePluginElectronActions` key and the
  * `ipcRenderer.invoke` argument, keeping the two in sync automatically.
  *
  * Throws on duplicate channel strings (hash collision guard).

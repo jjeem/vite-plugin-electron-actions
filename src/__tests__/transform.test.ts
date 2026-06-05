@@ -23,7 +23,7 @@ import {
 const FILE = "/file.ts";
 
 const rendererIpcCall = (name: string) =>
-  `window.__ea["${channelName(FILE, name)}"](...args)`;
+  `window.$$vitePluginElectronActions["${channelName(FILE, name)}"](...args)`;
 
 describe("transform", () => {
   describe("file top-level directive", () => {
