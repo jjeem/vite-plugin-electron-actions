@@ -7,7 +7,7 @@ declare global {
       string,
       (...args: unknown[]) => Promise<unknown>
     >;
-    $$mainSetupPromise: (callback: (result: boolean) => void) => void;
+    $$onMainSetupComplete: (callback: (result: boolean) => void) => void;
   }
 }
 
@@ -24,7 +24,7 @@ export function setupPreload(): void {
   }
   contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api);
   contextBridge.exposeInMainWorld(
-    "$$mainSetupPromise",
+    "$$onMainSetupComplete",
     async (callback: (result: boolean) => void) => {
       ipcRenderer.on("$$electron-actions:main-setup-complete", (_, result) => {
         callback(result);
