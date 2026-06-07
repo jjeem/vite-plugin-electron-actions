@@ -462,7 +462,7 @@ export function transformForMain(
   s.prepend(`import { ipcMain as ${RESERVED_IPC_MAIN} } from "electron"\n`);
   for (const { name, channel } of handlers) {
     s.append(
-      `\n${RESERVED_IPC_MAIN}.handle("${channel}", (_event, ...args) => ${name}(...args))`,
+      `\n${RESERVED_IPC_MAIN}.handle(${JSON.stringify(channel)}, (_event, ...args) => ${name}(...args))`,
     );
   }
 

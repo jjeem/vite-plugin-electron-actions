@@ -104,6 +104,23 @@ export const sum = async (...args) => {
 `);
     });
 
+    test("escapes channelPrefix in renderer stubs", () => {
+      const prefix = 'app"\\dev:\n';
+      const input = `
+"use node";
+
+export async function getObject() {
+  return {};
+}
+`;
+      const result = transformFileLevelDirective(FILE, input, prefix);
+      const channel = channelName(FILE, "getObject", prefix);
+      expect(result).toContain(
+        `window.$$vitePluginElectronActions[${JSON.stringify(channel)}](...args)`,
+      );
+      expect(() => parseSync("renderer.ts", result)).not.toThrow();
+    });
+
     test("transform file-level that has imported modules", () => {
       const input = `
 "use node";
@@ -638,6 +655,14 @@ describe("generateChannelsModule", () => {
     expect(result).toContain(`"${channel}"`);
   });
 
+  test("escapes channel strings as JavaScript string literals", () => {
+    const channel = channelName("/src/api.ts", "getData", 'app"\\dev:\n');
+    const registry = new Map([["/src/api.ts", [channel]]]);
+    const result = generateChannelsModule(registry);
+    expect(result).toContain(JSON.stringify(channel));
+    expect(() => parseSync("channels.ts", result)).not.toThrow();
+  });
+
   test("throws on duplicate channel strings", () => {
     const channel = channelName("/src/api.ts", "getUser");
     // Same channel appearing twice (simulates a hash collision)
@@ -656,6 +681,14 @@ describe("generateHandlersLoaderModule", () => {
     const registry = new Map([["/src/api.ts", ["ch:getUser"]]]);
     const result = generateHandlersLoaderModule(registry);
     expect(result).toBe(`import "/src/api.ts"`);
+  });
+
+  test("escapes imported file paths as JavaScript string literals", () => {
+    const filePath = '/src/app"dev/api.ts';
+    const registry = new Map([[filePath, ["ch:getUser"]]]);
+    const result = generateHandlersLoaderModule(registry);
+    expect(result).toBe(`import ${JSON.stringify(filePath)}`);
+    expect(() => parseSync("load-handlers.ts", result)).not.toThrow();
   });
 
   test("generates one import per file", () => {
@@ -862,6 +895,24 @@ export async function getUser() {
     expect(result).toContain(
       `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser", prefix)}", (_event, ...args) => getUser(...args))`,
     );
+  });
+
+  test("escapes channelPrefix in handle calls", () => {
+    const prefix = 'app"\\dev:\n';
+    const input = `\
+"use node";
+
+export async function getUser() {
+  return {};
+}
+`;
+    const result = transformForMain(FILE, input, prefix);
+    const channel = channelName(FILE, "getUser", prefix);
+    expect(result).not.toBeNull();
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle(${JSON.stringify(channel)}, (_event, ...args) => getUser(...args))`,
+    );
+    expect(() => parseSync("main.ts", result ?? "")).not.toThrow();
   });
 });
 
