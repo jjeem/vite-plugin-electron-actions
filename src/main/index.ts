@@ -23,27 +23,39 @@ export const mainSetupPromise: Promise<true> = new Promise<true>(
  */
 export async function notifyWindows(windows: BrowserWindow[]): Promise<void> {
   const result = await mainSetupPromise;
-  await Promise.all(
-    windows.map((win) => {
-      return new Promise<void>((resolve) => {
-        if (win.webContents.isLoading()) {
-          win.webContents.once("did-finish-load", () => {
-            win.webContents.send(
-              "$$electron-actions:main-setup-complete",
-              result,
-            );
-            resolve();
-          });
-        } else {
+  const promises = windows.map((win) => {
+    return new Promise<void>((resolve) => {
+      const send = () => {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
           win.webContents.send(
             "$$electron-actions:main-setup-complete",
             result,
           );
-          resolve();
         }
-      });
-    }),
-  );
+        resolve();
+      };
+
+      const skip = () => {
+        resolve();
+      };
+
+      if (win.isDestroyed() || win.webContents.isDestroyed()) {
+        skip();
+        return;
+      }
+
+      if (!win.webContents.isLoading()) {
+        send();
+        return;
+      }
+
+      win.webContents.once("did-finish-load", send);
+      win.webContents.once("did-fail-load", skip);
+      win.webContents.once("destroyed", skip);
+    });
+  });
+
+  await Promise.all(promises);
 }
 
 export interface SetupMainOptions {
