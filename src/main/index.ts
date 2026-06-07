@@ -1,6 +1,6 @@
 import type { BrowserWindow } from "electron";
 
-let res: (value: boolean) => void;
+let res: (value: true) => void;
 let rej: (reason?: unknown) => void;
 
 /**
@@ -9,7 +9,7 @@ let rej: (reason?: unknown) => void;
  *
  * Equivalent to the promise returned by `setupMain()`.
  */
-export const mainSetupPromise: Promise<boolean> = new Promise<boolean>(
+export const mainSetupPromise: Promise<true> = new Promise<true>(
   (resolve, reject) => {
     res = resolve;
     rej = reject;
@@ -64,19 +64,17 @@ export interface SetupMainOptions {
  * Returns a promise that resolves once all handlers are registered.
  * The same promise is available as the exported `mainSetupPromise`.
  */
-export async function setupMain(
-  options: SetupMainOptions = {},
-): Promise<boolean> {
+export async function setupMain(options: SetupMainOptions = {}): Promise<true> {
   import("vite-plugin-electron-actions:load-handlers")
     .then(() => {
       res(true);
     })
-    .catch((err) => {
+    .catch((error) => {
       console.error(
         "[vite-plugin-electron-actions] Error loading handlers: ",
-        err,
+        error,
       );
-      rej(false);
+      rej(error);
     });
 
   if (options.windows && options.windows.length > 0) {
