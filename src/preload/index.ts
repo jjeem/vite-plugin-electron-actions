@@ -1,9 +1,13 @@
-import channels from "electron-actions:channels";
+import channels from "vite-plugin-electron-actions:channels";
 import { contextBridge, ipcRenderer } from "electron";
 
 declare global {
   interface Window {
-    __ea: Record<string, (...args: unknown[]) => Promise<unknown>>;
+    $$vitePluginElectronActions: Record<
+      string,
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    $$onMainSetupComplete: (callback: (result: boolean) => void) => void;
   }
 }
 
@@ -15,8 +19,16 @@ declare global {
  */
 export function setupPreload(): void {
   const api: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
-  for (const [fnName, channel] of Object.entries(channels)) {
-    api[fnName] = (...args) => ipcRenderer.invoke(channel, ...args);
+  for (const channel of channels) {
+    api[channel] = (...args) => ipcRenderer.invoke(channel, ...args);
   }
-  contextBridge.exposeInMainWorld("__ea", api);
+  contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api);
+  contextBridge.exposeInMainWorld(
+    "$$onMainSetupComplete",
+    async (callback: (result: boolean) => void) => {
+      ipcRenderer.on("$$electron-actions:main-setup-complete", (_, result) => {
+        callback(result);
+      });
+    },
+  );
 }

@@ -3,12 +3,13 @@
 A Vite plugin that lets you mark functions with a `"use node"` directive so they run in the Electron main process — similar to React `"use server"`. The plugin transforms marked functions into IPC calls in the renderer and automatically registers `ipcMain.handle()` calls in the main process.
 
 > [!CAUTION]
-> This package is in early development. The API and internal behavior are subject to frequent changes. Do not use in production without expecting breaking changes in any version.
+> This package is in early development. The API and internal behavior are subject to frequent changes. 
+> Do not use in production without expecting breaking changes in any version.
 
 ## Installation
 
 ```bash
-npm install vite-plugin-electron-actions
+npm install -D vite-plugin-electron-actions
 ```
 
 ## Setup
@@ -30,7 +31,7 @@ export default defineConfig({
       {
         entry: "electron/main.ts",
         vite: {
-          plugins: [electronActions({ env: "main" })],
+          plugins: [electronActions({ env: "main", scanDirs: ["src"] })],
         },
         preload: {
           input: "electron/preload.ts",
@@ -89,15 +90,18 @@ export default defineConfig({
 
 ### Main process
 
-Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls:
+Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<boolean>` that resolves to `true` when all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
+
+Optionally pass a `windows` array — each `BrowserWindow` will receive a `$$electron-actions:main-setup-complete` IPC event once handlers are ready and the window finishes loading:
 
 ```typescript
 // electron/main.ts
-import { setupMain } from "vite-plugin-electron-actions/main"
+import { setupMain, mainSetupPromise, notifyWindows } from "vite-plugin-electron-actions/main"
 
-app.whenReady().then(() => {
-  setupMain()
-  // ...
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({ /* ... */ })
+  await setupMain({ windows: [win] })
+  // all ipcMain.handle() calls are now registered
 })
 ```
 
@@ -112,7 +116,7 @@ import { setupPreload } from "vite-plugin-electron-actions/preload"
 setupPreload()
 ```
 
-This exposes `window.__ea` via `contextBridge.exposeInMainWorld` as an object of individually named functions. Each function is locked to a single pre-determined IPC channel — the renderer cannot invoke arbitrary channels.
+This exposes `window.$$vitePluginElectronActions` via `contextBridge.exposeInMainWorld` as an object of individually named functions. Each function is locked to a single pre-determined IPC channel — the renderer cannot invoke arbitrary channels.
 
 ---
 
@@ -121,6 +125,8 @@ This exposes `window.__ea` via `contextBridge.exposeInMainWorld` as an object of
 ### Function-level
 
 Place `"use node"` inside a function body. Only that function becomes an IPC call — everything else in the file is left untouched. Works on both exported and non-exported functions.
+
+The function **must be `async`** — a sync function with `"use node"` is a build error.
 
 Imports used **exclusively** inside `"use node"` bodies are automatically removed from the renderer output.
 
@@ -135,7 +141,7 @@ const writeToFile = async () => {
 }
 
 // This stays in the renderer
-export function setupCounter(el: HTMLButtonElement) {
+export function setupFile(el: HTMLButtonElement) {
   el.addEventListener("click", () => writeToFile())
 }
 ```
@@ -159,14 +165,31 @@ export async function createUser(name: string) {
 }
 ```
 
-**Constraints in file-level mode** — the following will throw a build error:
+---
 
-- Sync function exports: `export function foo() {}`
-- Non-async variable exports: `export const x = 5`
-- Class exports: `export class Foo {}`
+## Rules
+
+These rules apply regardless of whether you use file-level or function-level `"use node"`:
+
+- **`async` is required.** Every `"use node"` function must be declared `async`. A sync function with the directive is a build error.
+- **Top-level only.** Only top-level function declarations and variable declarations are processed. Functions nested inside blocks, conditionals, loops, or other functions are silently ignored — the directive has no effect there.
+
+Additional constraints in **file-level** mode (any of these is a build error):
+
+- Sync function/arrow-function exports: `export function foo() {}`
 - Re-exports: `export { foo }`
 
-Type/interface exports (`export type Foo`, `export interface Bar`) are silently stripped.
+Other exports (`export const x = 5`) are silently stripped from the Renderer bundle only.
+
+---
+
+## Security
+
+`"use node"` handlers run in the main process and have full Node.js access. Their arguments arrive over IPC from the renderer, which is a web context — if the renderer is ever compromised (e.g. via XSS or a malicious dependency), an attacker can call any handler with arbitrary arguments.
+
+- **Validate all inputs.** Check argument count, types, and value ranges before acting on them. Never assume the caller passed well-formed data.
+- **Apply access control where needed.** If a handler performs a sensitive operation (filesystem writes, network requests, spawning processes), add appropriate checks rather than relying on the renderer to gate access.
+- **Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing — but this does not protect against argument manipulation.
 
 ---
 
@@ -233,37 +256,47 @@ export async function getUser(id: string) {
   return db.users.findUnique({ where: { id } })
 }
 
-// After (renderer bundle) — channel strings are never present here
+// After (renderer bundle)
 export async function getUser(...args) {
-  return await window.__ea["getUser"](...args)
+  return await window.$$vitePluginElectronActions["a3f2b1c4:getUser"](...args)
 }
 ```
 
-**`setupMain()` — generated at build time**:
+**`setupMain()` — main process build**:
+
+The plugin transforms each `"use node"` file in the main process build to keep the real implementation and inject `ipcMain.handle()` calls directly into the file:
 
 ```typescript
-// electron-actions:handlers-map (generated — data only)
-import * as _ea0 from "/abs/path/src/api.ts"
+// src/api.ts — after main-process transform
+import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"
+import { db } from "./db"
 
-export default {
-  "a3f2b1c4:getUser": _ea0["getUser"],
+export async function getUser(id: string) {
+  return db.users.findUnique({ where: { id } })
 }
+
+$vitePluginElectronActions_ipcMain.handle("a3f2b1c4:getUser", (_event, ...args) => getUser(...args))
 ```
 
-`setupMain()` in `src/main/index.ts` iterates this map and calls `ipcMain.handle()` for each entry.
+`vite-plugin-electron-actions:load-handlers` is a virtual module that contains one side-effect import per `"use node"` file. It is imported by `vite-plugin-electron-actions/main`
+
+```typescript
+// vite-plugin-electron-actions:load-handlers (generated)
+import "/abs/path/src/api.ts"
+```
+
+Because the `load-handlers` module is a **static** import of `vite-plugin-electron-actions/main`, all handler files are in the primary module graph and are evaluated synchronously at startup. Side effects run exactly once — the bundler deduplicates by module ID even if the file is also imported elsewhere in main.
 
 **`setupPreload()` — generated at build time**:
 
 ```typescript
-// electron-actions:channels (generated — data only)
-export default {
-  "getUser": "a3f2b1c4:getUser",
-}
+// vite-plugin-electron-actions:channels (generated — data only)
+export default [
+  "a3f2b1c4:getUser",
+]
 ```
 
-`setupPreload()` in `src/preload/index.ts` iterates this map and wires up `contextBridge.exposeInMainWorld("__ea", api)`.
-
-Channel strings are only ever present in the preload and main process bundles — never in the renderer.
+`setupPreload()` in `src/preload/index.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
 
 ### IPC channel names
 

@@ -7,7 +7,7 @@ import { collectIdentifierPositions } from "../plugin/ast.ts";
 import { channelName } from "../plugin/channel.ts";
 import {
   generateChannelsModule,
-  generateHandlersMapModule,
+  generateHandlersLoaderModule,
 } from "../plugin/codegen.ts";
 import { scanForHandlers } from "../plugin/scanner.ts";
 import {
@@ -15,6 +15,7 @@ import {
   checkFunctionLevelDirective,
   transform,
   transformFileLevelDirective,
+  transformForMain,
   transformFunctionLevelDirective,
 } from "../plugin/transform.ts";
 
@@ -22,7 +23,7 @@ import {
 const FILE = "/file.ts";
 
 const rendererIpcCall = (name: string) =>
-  `window.__ea[${JSON.stringify(name)}](...args)`;
+  `window.$$vitePluginElectronActions["${channelName(FILE, name)}"](...args)`;
 
 describe("transform", () => {
   describe("file top-level directive", () => {
@@ -101,6 +102,23 @@ export const sum = async (...args) => {
   return await ${rendererIpcCall("sum")};
 }
 `);
+    });
+
+    test("escapes channelPrefix in renderer stubs", () => {
+      const prefix = 'app"\\dev:\n';
+      const input = `
+"use node";
+
+export async function getObject() {
+  return {};
+}
+`;
+      const result = transformFileLevelDirective(FILE, input, prefix);
+      const channel = channelName(FILE, "getObject", prefix);
+      expect(result).toContain(
+        `window.$$vitePluginElectronActions[${JSON.stringify(channel)}](...args)`,
+      );
+      expect(() => parseSync("renderer.ts", result)).not.toThrow();
     });
 
     test("transform file-level that has imported modules", () => {
@@ -327,23 +345,21 @@ function internalHelper() {
 `);
     });
 
-    test("transform sync exported function with directive", () => {
+    test("throws on sync exported function with directive", () => {
       const input = `\
 export function getData() {
   "use node";
   return { value: 42 };
 }
 `;
-      expect(transformFunctionLevelDirective(FILE, input)).toEqual(`\
-export async function getData(...args) {
-  return await ${rendererIpcCall("getData")};
-}
-`);
+      expect(() => transformFunctionLevelDirective(FILE, input)).toThrow(
+        /only allows async functions/,
+      );
     });
 
     test("transforms non-exported functions with directive", () => {
       const input = `\
-function internalFn() {
+async function internalFn() {
   "use node";
   return 1;
 }
@@ -362,6 +378,18 @@ export async function publicFn(...args) {
   return await ${rendererIpcCall("publicFn")};
 }
 `);
+    });
+
+    test("throws on sync non-exported function with directive", () => {
+      const input = `\
+function internalFn() {
+  "use node";
+  return 1;
+}
+`;
+      expect(() => transformFunctionLevelDirective(FILE, input)).toThrow(
+        /only allows async functions/,
+      );
     });
 
     test("no changes when no function has the directive", () => {
@@ -459,24 +487,20 @@ export async function asyncFunc() {
       expect(() => transform(input, FILE)).toThrow(/re-exports/);
     });
 
-    test("file-level throws on class export", () => {
-      const input = `
-"use node";
-
-export class Foo {}
-`;
-      expect(() => transform(input, FILE)).toThrow(/class exports/);
-    });
-
-    test("file-level throws on non-async variable export", () => {
+    test("file-level silently skips non-async variable export", () => {
       const input = `
 "use node";
 
 export const x = 5;
+
+export async function asyncFunc() {
+  return 3;
+}
 `;
-      expect(() => transform(input, FILE)).toThrow(
-        /only allows async function exports/,
-      );
+      const result = transform(input, FILE);
+      expect(result).not.toBeNull();
+      expect(result).not.toContain("export const x");
+      expect(result).toContain(rendererIpcCall("asyncFunc"));
     });
 
     test("file-level silently strips type/interface exports", () => {
@@ -495,16 +519,16 @@ export async function asyncFunc() {
       expect(result).toContain(rendererIpcCall("asyncFunc"));
     });
 
-    test("function-level extracts sync exported functions with directive", () => {
+    test("function-level throws on sync exported function with directive", () => {
       const input = `\
 export function getData() {
   "use node";
   return { value: 42 };
 }
 `;
-      const result = transform(input, FILE);
-      expect(result).not.toBeNull();
-      expect(result).toContain(rendererIpcCall("getData"));
+      expect(() => transform(input, FILE)).toThrow(
+        /only allows async functions/,
+      );
     });
 
     test("handler names match IPC channels in generated code", () => {
@@ -613,65 +637,282 @@ export async function doWork() {
 describe("generateChannelsModule", () => {
   test("empty registry produces an empty default export", () => {
     const result = generateChannelsModule(new Map());
-    expect(result).toBe("export default {};");
+    expect(result).toBe("export default [];");
   });
 
-  test("generates fnName → channel entries", () => {
+  test("generates a channel array entry for a single handler", () => {
     const channel = channelName("/src/api.ts", "getUser");
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateChannelsModule(registry);
-    expect(result).toContain(`"getUser": "${channel}"`);
+    expect(result).toContain(`"${channel}"`);
   });
 
-  test("channel strings are present, function names are the keys (security boundary)", () => {
-    const channel = channelName("/src/api.ts", "getData");
+  test("full channel (including prefix) is in the array", () => {
+    const prefix = "app:";
+    const channel = channelName("/src/api.ts", "getData", prefix);
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateChannelsModule(registry);
-    // Channel hash is the value — never visible in the renderer
-    expect(result).toContain(channel);
-    // Function name is the key — what the renderer accesses via window.__ea
-    expect(result).toContain(`"getData":`);
+    expect(result).toContain(`"${channel}"`);
+  });
+
+  test("escapes channel strings as JavaScript string literals", () => {
+    const channel = channelName("/src/api.ts", "getData", 'app"\\dev:\n');
+    const registry = new Map([["/src/api.ts", [channel]]]);
+    const result = generateChannelsModule(registry);
+    expect(result).toContain(JSON.stringify(channel));
+    expect(() => parseSync("channels.ts", result)).not.toThrow();
+  });
+
+  test("throws on duplicate channel strings", () => {
+    const channel = channelName("/src/api.ts", "getUser");
+    // Same channel appearing twice (simulates a hash collision)
+    const registry = new Map([["/src/api.ts", [channel, channel]]]);
+    expect(() => generateChannelsModule(registry)).toThrow(/collision/);
   });
 });
 
-describe("generateHandlersMapModule", () => {
-  test("empty registry produces an empty default export", () => {
-    const result = generateHandlersMapModule(new Map(), (f) => f);
-    expect(result).toBe("export default {};");
+describe("generateHandlersLoaderModule", () => {
+  test("empty registry produces empty string", () => {
+    const result = generateHandlersLoaderModule(new Map());
+    expect(result).toBe("");
   });
 
-  test("generates an import and a channel → fn entry for a single handler", () => {
+  test("generates a side-effect import for a single file", () => {
+    const registry = new Map([["/src/api.ts", ["ch:getUser"]]]);
+    const result = generateHandlersLoaderModule(registry);
+    expect(result).toBe(`import "/src/api.ts"`);
+  });
+
+  test("escapes imported file paths as JavaScript string literals", () => {
+    const filePath = '/src/app"dev/api.ts';
+    const registry = new Map([[filePath, ["ch:getUser"]]]);
+    const result = generateHandlersLoaderModule(registry);
+    expect(result).toBe(`import ${JSON.stringify(filePath)}`);
+    expect(() => parseSync("load-handlers.ts", result)).not.toThrow();
+  });
+
+  test("generates one import per file", () => {
+    const registry = new Map([
+      ["/src/users.ts", ["ch:getUser"]],
+      ["/src/posts.ts", ["ch:getPost"]],
+    ]);
+    const result = generateHandlersLoaderModule(registry);
+    expect(result).toContain(`import "/src/users.ts"`);
+    expect(result).toContain(`import "/src/posts.ts"`);
+  });
+
+  test("does not include channel strings — those live in the transformed files", () => {
     const channel = channelName("/src/api.ts", "getUser");
     const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateHandlersMapModule(registry, (f) => f);
-    expect(result).toContain(`import * as _ea0 from "/src/api.ts"`);
-    expect(result).toContain(`"${channel}": _ea0["getUser"]`);
+    const result = generateHandlersLoaderModule(registry);
+    expect(result).not.toContain(channel);
+  });
+});
+
+describe("transformForMain", () => {
+  test("returns null for files without directives", () => {
+    const input = `\
+export async function getUser(id) {
+  return { id };
+}
+`;
+    expect(transformForMain(FILE, input)).toBeNull();
   });
 
-  test("resolveImport is called per file — allows injecting re-export prefix", () => {
-    const channel = channelName("/src/api.ts", "doWork");
-    const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateHandlersMapModule(
-      registry,
-      (f) => `electron-actions:non-exported-actions:${f}`,
-    );
+  test("file-level: keeps real implementation and appends ipcMain.handle calls", () => {
+    const input = `\
+"use node";
+import { db } from "./db";
+
+export async function getUser(id) {
+  return db.user.findUnique({ where: { id } });
+}
+`;
+    const result = transformForMain(FILE, input);
+    expect(result).not.toBeNull();
+    // Real implementation must be kept
+    expect(result).toContain("db.user.findUnique");
+    // ipcMain import injected
     expect(result).toContain(
-      `import * as _ea0 from "electron-actions:non-exported-actions:/src/api.ts"`,
+      `import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"`,
+    );
+    // handle call appended
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
+    );
+    // directive stripped
+    expect(result).not.toContain('"use node"');
+  });
+
+  test("file-level: handles async arrow function exports", () => {
+    const input = `\
+"use node";
+
+export const sum = async (a, b) => {
+  return a + b;
+};
+`;
+    const result = transformForMain(FILE, input);
+    expect(result).not.toBeNull();
+    expect(result).toContain("return a + b");
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "sum")}", (_event, ...args) => sum(...args))`,
     );
   });
 
-  test("generates separate namespace imports for multiple files", () => {
-    const ch1 = channelName("/src/users.ts", "getUser");
-    const ch2 = channelName("/src/posts.ts", "getPost");
-    const registry = new Map([
-      ["/src/users.ts", [ch1]],
-      ["/src/posts.ts", [ch2]],
-    ]);
-    const result = generateHandlersMapModule(registry, (f) => f);
-    expect(result).toContain(`import * as _ea0 from "/src/users.ts"`);
-    expect(result).toContain(`import * as _ea1 from "/src/posts.ts"`);
-    expect(result).toContain(`"${ch1}": _ea0["getUser"]`);
-    expect(result).toContain(`"${ch2}": _ea1["getPost"]`);
+  test("function-level: appends handle call for exported function with directive", () => {
+    const input = `\
+export async function getUser(id) {
+  "use node";
+  return { id };
+}
+`;
+    const result = transformForMain(FILE, input);
+    expect(result).not.toBeNull();
+    expect(result).toContain("return { id }");
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
+    );
+  });
+
+  test("function-level: appends handle call for non-exported function with directive", () => {
+    const input = `\
+async function writeLog(msg) {
+  "use node";
+  return msg;
+}
+`;
+    const result = transformForMain(FILE, input);
+    expect(result).not.toBeNull();
+    expect(result).toContain("return msg");
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
+    );
+  });
+
+  test("function-level: only handles functions with directive, leaves others untouched", () => {
+    const input = `\
+export async function withDirective() {
+  "use node";
+  return 1;
+}
+
+export async function withoutDirective() {
+  return 2;
+}
+`;
+    const result = transformForMain(FILE, input);
+    expect(result).not.toBeNull();
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "withDirective")}", (_event, ...args) => withDirective(...args))`,
+    );
+    expect(result).not.toContain("withoutDirective(...args)");
+  });
+
+  test("function-level: handles non-exported arrow function with directive", () => {
+    const input = `\
+const writeLog = async (msg) => {
+  "use node";
+  return msg;
+};
+`;
+    const result = transformForMain(FILE, input);
+    expect(result).not.toBeNull();
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
+    );
+  });
+
+  test("throws when user imports a binding named $vitePluginElectronActions_ipcMain", () => {
+    const input = `\
+"use node";
+
+import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).toThrow(
+      /\$vitePluginElectronActions_ipcMain.*reserved/,
+    );
+  });
+
+  test("throws when user has a variable named $vitePluginElectronActions_ipcMain", () => {
+    const input = `\
+"use node";
+
+const $vitePluginElectronActions_ipcMain = "oops";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).toThrow(
+      /\$vitePluginElectronActions_ipcMain.*reserved/,
+    );
+  });
+
+  test("throws regardless of which module the conflicting import comes from", () => {
+    const input = `\
+"use node";
+
+import { something as $vitePluginElectronActions_ipcMain } from "some-other-lib";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).toThrow(
+      /\$vitePluginElectronActions_ipcMain.*reserved/,
+    );
+  });
+
+  test("does not throw when user imports ipcMain under a different alias", () => {
+    const input = `\
+"use node";
+
+import { ipcMain as myIpcMain } from "electron";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).not.toThrow();
+  });
+
+  test("channelPrefix flows through to handle calls", () => {
+    const prefix = "app:";
+    const input = `\
+"use node";
+
+export async function getUser() {
+  return {};
+}
+`;
+    const result = transformForMain(FILE, input, prefix);
+    expect(result).not.toBeNull();
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser", prefix)}", (_event, ...args) => getUser(...args))`,
+    );
+  });
+
+  test("escapes channelPrefix in handle calls", () => {
+    const prefix = 'app"\\dev:\n';
+    const input = `\
+"use node";
+
+export async function getUser() {
+  return {};
+}
+`;
+    const result = transformForMain(FILE, input, prefix);
+    const channel = channelName(FILE, "getUser", prefix);
+    expect(result).not.toBeNull();
+    expect(result).toContain(
+      `$vitePluginElectronActions_ipcMain.handle(${JSON.stringify(channel)}, (_event, ...args) => getUser(...args))`,
+    );
+    expect(() => parseSync("main.ts", result ?? "")).not.toThrow();
   });
 });
 
@@ -688,19 +929,16 @@ describe("channelPrefix integration", () => {
     return { root: tmpDir };
   };
 
-  test("channelPrefix flows through scanForHandlers → generateHandlersMapModule (main env)", ({
+  test("channelPrefix flows through scanForHandlers → generateHandlersLoaderModule (main env)", ({
     onTestFinished,
   }) => {
     const { root } = setup(onTestFinished);
     const prefix = "my-app:";
     const registry = scanForHandlers(["src"], root, prefix);
-    const result = generateHandlersMapModule(registry, (f) => f);
-    // Every channel key in the output must start with the prefix
-    for (const channels of registry.values()) {
-      for (const channel of channels) {
-        expect(channel.startsWith(prefix)).toBe(true);
-        expect(result).toContain(JSON.stringify(channel));
-      }
+    const result = generateHandlersLoaderModule(registry);
+    // Loader module imports real file paths — channels are in the transformed files
+    for (const filePath of registry.keys()) {
+      expect(result).toContain(`"${filePath}"`);
     }
   });
 
@@ -715,7 +953,7 @@ describe("channelPrefix integration", () => {
     for (const channels of registry.values()) {
       for (const channel of channels) {
         expect(channel.startsWith(prefix)).toBe(true);
-        expect(result).toContain(JSON.stringify(channel));
+        expect(result).toContain(`"${channel}"`);
       }
     }
   });

@@ -1,14 +1,12 @@
 import MagicString from "magic-string";
 import {
-  type BlockStatement,
-  type Expression,
-  type FunctionBody,
   type ImportDefaultSpecifier,
   type ImportNamespaceSpecifier,
   type ImportSpecifier,
   parseSync,
 } from "oxc-parser";
 import { collectIdentifierPositions } from "./ast.js";
+import { channelName } from "./channel.js";
 import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
@@ -22,7 +20,6 @@ export {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
 } from "./directives.js";
-export { extractNonExportedHandlerNames } from "./handlers.js";
 export { scanForHandlers } from "./scanner.js";
 
 // ── Renderer transforms ────────────────────────────────────────
@@ -30,6 +27,7 @@ export { scanForHandlers } from "./scanner.js";
 export function transformFileLevelDirective(
   fileName: string,
   code: string,
+  channelPrefix = "",
 ): string {
   const { program } = parseSync(fileName, code);
   let newCode = "";
@@ -42,36 +40,22 @@ export function transformFileLevelDirective(
     // Re-exports: `export { foo }` or `export { foo } from "..."` — not allowed
     if (!declaration && node.specifiers && node.specifiers.length > 0) {
       throw new Error(
-        `[electron-actions] File-level "use node" does not allow re-exports (\`export { ... }\`). Found in ${fileName}.`,
-      );
-    }
-
-    // `export type Foo` / `export interface Foo` — silently skip (no runtime value)
-    if (
-      declaration?.type === "TSTypeAliasDeclaration" ||
-      declaration?.type === "TSInterfaceDeclaration"
-    ) {
-      continue;
-    }
-
-    // `export class Foo` — not allowed
-    if (declaration?.type === "ClassDeclaration") {
-      throw new Error(
-        `[electron-actions] File-level "use node" does not allow class exports. Found in ${fileName}.`,
+        `[vite-plugin-electron-actions] File-level "use node" does not allow re-exports (\`export { ... }\`). Found in ${fileName}.`,
       );
     }
 
     if (declaration?.type === "FunctionDeclaration") {
       if (!declaration.async) {
         throw new Error(
-          `[electron-actions] File-level "use node" only allows async function exports. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+          `[vite-plugin-electron-actions] File-level "use node" only allows async function exports. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
         );
       }
       if (!declaration.id || declaration.id.type !== "Identifier") {
         throw new Error("Exported async function must have a name");
       }
       const name = declaration.id.name;
-      newCode = newCode.concat(`export ${ipcInvokerFn(name)}\n`);
+      const key = channelName(fileName, name, channelPrefix);
+      newCode = newCode.concat(`export ${ipcInvokerFn(name, key)}\n`);
     }
 
     if (declaration?.type === "VariableDeclaration") {
@@ -84,13 +68,9 @@ export function transformFileLevelDirective(
         if (isAsyncArrow || isAsyncFnExpr) {
           if (decl.id.type === "Identifier") {
             const name = decl.id.name;
-            newCode = newCode.concat(`export ${ipcInvokerArrow(name)}\n`);
+            const key = channelName(fileName, name, channelPrefix);
+            newCode = newCode.concat(`export ${ipcInvokerArrow(name, key)}\n`);
           }
-        } else {
-          // Non-async variable export (e.g. `export const x = 5`) — not allowed
-          throw new Error(
-            `[electron-actions] File-level "use node" only allows async function exports. Found non-async export \`${decl.id.type === "Identifier" ? decl.id.name : "(unknown)"}\` in ${fileName}.`,
-          );
         }
       }
     }
@@ -102,51 +82,16 @@ export function transformFileLevelDirective(
 export function transformFunctionLevelDirective(
   fileName: string,
   code: string,
+  channelPrefix = "",
 ): string {
   const { program } = parseSync(fileName, code);
   const s = new MagicString(code);
 
-  // ── Collect "use node" body spans ─────────────────────────────
-  // We need to know which regions are inside "use node" functions
-  // so we can determine import usage outside those regions.
+  // ── Collect "use node" body spans + replace with IPC stubs ───
+  // Done in a single pass: record spans for import-removal, and
+  // overwrite each "use node" function with its IPC invoker stub.
   const useNodeBodySpans: Array<{ start: number; end: number }> = [];
 
-  function recordUseNodeBody(
-    body: BlockStatement | FunctionBody | Expression | null | undefined,
-  ) {
-    if (hasUseNodeDirective(body)) {
-      useNodeBodySpans.push({
-        start: body.start,
-        end: body.end,
-      });
-    }
-  }
-
-  for (const node of program.body) {
-    if (node.type === "ExportNamedDeclaration") {
-      const { declaration } = node;
-      if (declaration?.type === "FunctionDeclaration") {
-        recordUseNodeBody(declaration.body);
-      }
-      if (declaration?.type === "VariableDeclaration") {
-        for (const decl of declaration.declarations) {
-          if (decl.init?.type === "ArrowFunctionExpression") {
-            recordUseNodeBody(decl.init.body);
-          }
-        }
-      }
-    }
-    if (node.type === "FunctionDeclaration") recordUseNodeBody(node.body);
-    if (node.type === "VariableDeclaration") {
-      for (const decl of node.declarations) {
-        if (decl.init?.type === "ArrowFunctionExpression") {
-          recordUseNodeBody(decl.init.body);
-        }
-      }
-    }
-  }
-
-  // ── Replace "use node" functions with IPC calls ───────────────
   for (const node of program.body) {
     // ── exported function declaration ──────────────────────────
     if (node.type === "ExportNamedDeclaration") {
@@ -154,13 +99,27 @@ export function transformFunctionLevelDirective(
 
       if (declaration?.type === "FunctionDeclaration") {
         if (hasUseNodeDirective(declaration.body)) {
+          if (!declaration.async) {
+            throw new Error(
+              `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+            );
+          }
           if (!declaration.id || declaration.id.type !== "Identifier") {
             throw new Error(
               'Exported function with "use node" must have a name',
             );
           }
           const name = declaration.id.name;
-          s.overwrite(node.start, node.end, `export ${ipcInvokerFn(name)}`);
+          const key = channelName(fileName, name, channelPrefix);
+          useNodeBodySpans.push({
+            start: declaration.body.start,
+            end: declaration.body.end,
+          });
+          s.overwrite(
+            node.start,
+            node.end,
+            `export ${ipcInvokerFn(name, key)}`,
+          );
         }
       }
 
@@ -171,11 +130,21 @@ export function transformFunctionLevelDirective(
             decl.id.type === "Identifier" &&
             hasUseNodeDirective(decl.init.body)
           ) {
+            if (!decl.init.async) {
+              throw new Error(
+                `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
+              );
+            }
             const name = decl.id.name;
+            const key = channelName(fileName, name, channelPrefix);
+            useNodeBodySpans.push({
+              start: decl.init.body.start,
+              end: decl.init.body.end,
+            });
             s.overwrite(
               node.start,
               node.end,
-              `export ${ipcInvokerArrow(name)}`,
+              `export ${ipcInvokerArrow(name, key)}`,
             );
           }
         }
@@ -185,11 +154,18 @@ export function transformFunctionLevelDirective(
     // ── non-exported function declaration ──────────────────────
     if (node.type === "FunctionDeclaration") {
       if (hasUseNodeDirective(node.body)) {
+        if (!node.async) {
+          throw new Error(
+            `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync function \`${node.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+          );
+        }
         if (!node.id || node.id.type !== "Identifier") {
           throw new Error('Function with "use node" must have a name');
         }
         const name = node.id.name;
-        s.overwrite(node.start, node.end, ipcInvokerFn(name));
+        const key = channelName(fileName, name, channelPrefix);
+        useNodeBodySpans.push({ start: node.body.start, end: node.body.end });
+        s.overwrite(node.start, node.end, ipcInvokerFn(name, key));
       }
     }
 
@@ -201,8 +177,18 @@ export function transformFunctionLevelDirective(
           decl.id.type === "Identifier" &&
           hasUseNodeDirective(decl.init.body)
         ) {
+          if (!decl.init.async) {
+            throw new Error(
+              `[vite-plugin-electron-actions] Function-level "use node" only allows async functions. Found sync arrow function \`${decl.id.name}\` in ${fileName}.`,
+            );
+          }
           const name = decl.id.name;
-          s.overwrite(node.start, node.end, ipcInvokerArrow(name));
+          const key = channelName(fileName, name, channelPrefix);
+          useNodeBodySpans.push({
+            start: decl.init.body.start,
+            end: decl.init.body.end,
+          });
+          s.overwrite(node.start, node.end, ipcInvokerArrow(name, key));
         }
       }
     }
@@ -283,6 +269,206 @@ export function transformFunctionLevelDirective(
   return s.toString();
 }
 
+// ── Reserved identifier guard ──────────────────────────────────
+
+const RESERVED_IPC_MAIN = "$vitePluginElectronActions_ipcMain";
+
+/**
+ * Throws if the user's source file already declares a binding whose local
+ * name collides with the identifier the plugin will inject. Checks both
+ * import specifiers and top-level variable declarations.
+ */
+function checkReservedIdentifierUsage(
+  fileName: string,
+  program: ReturnType<typeof parseSync>["program"],
+): void {
+  for (const node of program.body) {
+    if (node.type === "ImportDeclaration") {
+      for (const spec of node.specifiers ?? []) {
+        if (spec.local.name === RESERVED_IPC_MAIN) {
+          throw new Error(
+            `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your import in ${fileName}.`,
+          );
+        }
+      }
+    }
+
+    if (node.type === "VariableDeclaration") {
+      for (const decl of node.declarations) {
+        if (
+          decl.id.type === "Identifier" &&
+          decl.id.name === RESERVED_IPC_MAIN
+        ) {
+          throw new Error(
+            `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your variable in ${fileName}.`,
+          );
+        }
+      }
+    }
+  }
+}
+
+// ── Main process transform ─────────────────────────────────────
+
+/**
+ * Transform a `"use node"` file for the Electron main process build.
+ *
+ * Instead of replacing functions with IPC stubs (as the renderer transform
+ * does), this keeps the real implementations and appends an
+ * `ipcMain.handle()` call for each handler directly into the file.
+ *
+ * This means every `"use node"` file is its own self-registering module —
+ * side effects run exactly once regardless of how many times the file is
+ * imported, because the bundler deduplicates by module ID.
+ *
+ * The `vite-plugin-electron-actions:load-handlers` virtual module imports
+ * all handler files as side effects so that `setupMain()` triggers
+ * registration as part of the static module graph.
+ *
+ * Returns `null` if the file contains no `"use node"` directives.
+ */
+export function transformForMain(
+  fileName: string,
+  code: string,
+  channelPrefix = "",
+): string | null {
+  const { program } = parseSync(fileName, code);
+
+  const isFileLevel = checkFileLevelDirective(program);
+  const isFunctionLevel = checkFunctionLevelDirective(program);
+
+  if (!isFileLevel && !isFunctionLevel) return null;
+
+  const s = new MagicString(code);
+  const handlers: Array<{ name: string; channel: string }> = [];
+
+  if (isFileLevel) {
+    // Strip the "use node" directive string from the output
+    const directiveNode = program.body[0];
+    if (directiveNode) {
+      const end =
+        directiveNode.end < code.length && code[directiveNode.end] === "\n"
+          ? directiveNode.end + 1
+          : directiveNode.end;
+      s.remove(directiveNode.start, end);
+    }
+
+    for (const node of program.body) {
+      if (node.type !== "ExportNamedDeclaration") continue;
+      const { declaration } = node;
+
+      if (
+        declaration?.type === "FunctionDeclaration" &&
+        declaration.async &&
+        declaration.id?.type === "Identifier"
+      ) {
+        const name = declaration.id.name;
+        handlers.push({
+          name,
+          channel: channelName(fileName, name, channelPrefix),
+        });
+      }
+
+      if (declaration?.type === "VariableDeclaration") {
+        for (const decl of declaration.declarations) {
+          const init = decl.init;
+          const isAsyncArrow =
+            init?.type === "ArrowFunctionExpression" && init.async;
+          const isAsyncFnExpr =
+            init?.type === "FunctionExpression" && init.async;
+          if (
+            (isAsyncArrow || isAsyncFnExpr) &&
+            decl.id.type === "Identifier"
+          ) {
+            const name = decl.id.name;
+            handlers.push({
+              name,
+              channel: channelName(fileName, name, channelPrefix),
+            });
+          }
+        }
+      }
+    }
+  } else {
+    // Function-level: collect every function with a "use node" body,
+    // exported or not.
+    for (const node of program.body) {
+      if (node.type === "ExportNamedDeclaration") {
+        const { declaration } = node;
+
+        if (
+          declaration?.type === "FunctionDeclaration" &&
+          declaration.id?.type === "Identifier" &&
+          hasUseNodeDirective(declaration.body)
+        ) {
+          const name = declaration.id.name;
+          handlers.push({
+            name,
+            channel: channelName(fileName, name, channelPrefix),
+          });
+        }
+
+        if (declaration?.type === "VariableDeclaration") {
+          for (const decl of declaration.declarations) {
+            if (
+              decl.init?.type === "ArrowFunctionExpression" &&
+              decl.id.type === "Identifier" &&
+              hasUseNodeDirective(decl.init.body)
+            ) {
+              const name = decl.id.name;
+              handlers.push({
+                name,
+                channel: channelName(fileName, name, channelPrefix),
+              });
+            }
+          }
+        }
+      }
+
+      if (
+        node.type === "FunctionDeclaration" &&
+        node.id?.type === "Identifier" &&
+        hasUseNodeDirective(node.body)
+      ) {
+        const name = node.id.name;
+        handlers.push({
+          name,
+          channel: channelName(fileName, name, channelPrefix),
+        });
+      }
+
+      if (node.type === "VariableDeclaration") {
+        for (const decl of node.declarations) {
+          if (
+            decl.init?.type === "ArrowFunctionExpression" &&
+            decl.id.type === "Identifier" &&
+            hasUseNodeDirective(decl.init.body)
+          ) {
+            const name = decl.id.name;
+            handlers.push({
+              name,
+              channel: channelName(fileName, name, channelPrefix),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  if (handlers.length === 0) return null;
+
+  checkReservedIdentifierUsage(fileName, program);
+
+  s.prepend(`import { ipcMain as ${RESERVED_IPC_MAIN} } from "electron"\n`);
+  for (const { name, channel } of handlers) {
+    s.append(
+      `\n${RESERVED_IPC_MAIN}.handle(${JSON.stringify(channel)}, (_event, ...args) => ${name}(...args))`,
+    );
+  }
+
+  return s.toString();
+}
+
 // ── Unified transform entry point ──────────────────────────────
 
 /**
@@ -291,7 +477,11 @@ export function transformFunctionLevelDirective(
  * Returns the transformed renderer stub code, or `null` if the file
  * contains no `"use node"` directives.
  */
-export function transform(code: string, fileName: string): string | null {
+export function transform(
+  code: string,
+  fileName: string,
+  channelPrefix = "",
+): string | null {
   const { program } = parseSync(fileName, code);
 
   const isFileLevel = checkFileLevelDirective(program);
@@ -300,8 +490,8 @@ export function transform(code: string, fileName: string): string | null {
   if (!isFileLevel && !isFunctionLevel) return null;
 
   if (isFileLevel) {
-    return transformFileLevelDirective(fileName, code);
+    return transformFileLevelDirective(fileName, code, channelPrefix);
   }
 
-  return transformFunctionLevelDirective(fileName, code);
+  return transformFunctionLevelDirective(fileName, code, channelPrefix);
 }

@@ -1,8 +1,5 @@
 import type { Program } from "oxc-parser";
-import {
-  checkFunctionLevelDirective,
-  hasUseNodeDirective,
-} from "./directives.js";
+import { hasUseNodeDirective } from "./directives.js";
 
 // ── Handler extraction ─────────────────────────────────────────
 
@@ -73,39 +70,6 @@ export function extractHandlerNames(
           ) {
             names.push(decl.id.name);
           }
-        }
-      }
-    }
-  }
-
-  return names;
-}
-
-/**
- * Returns names of non-exported functions/arrows that have a "use node"
- * directive. These need to be re-exported via electron-actions:non-exported-actions:
- * so that ipcMain.handle() can reference them via `import * as ns`.
- */
-export function extractNonExportedHandlerNames(program: Program): string[] {
-  if (!checkFunctionLevelDirective(program)) return [];
-
-  const names: string[] = [];
-
-  for (const node of program.body) {
-    if (node.type === "FunctionDeclaration") {
-      if (node.id?.type === "Identifier" && hasUseNodeDirective(node.body)) {
-        names.push(node.id.name);
-      }
-    }
-
-    if (node.type === "VariableDeclaration") {
-      for (const decl of node.declarations) {
-        if (
-          decl.init?.type === "ArrowFunctionExpression" &&
-          decl.id.type === "Identifier" &&
-          hasUseNodeDirective(decl.init.body)
-        ) {
-          names.push(decl.id.name);
         }
       }
     }
