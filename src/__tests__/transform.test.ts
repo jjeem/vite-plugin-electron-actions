@@ -1,8 +1,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { IpcMainInvokeEvent } from "electron";
 import { parse, parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
+import {
+  $vitePluginElectronActions_runAction,
+  getActionContext,
+} from "../main/index.ts";
 import { collectIdentifierPositions } from "../plugin/ast.ts";
 import { channelName } from "../plugin/channel.ts";
 import {
@@ -23,7 +28,25 @@ import {
 const FILE = "/file.ts";
 
 const rendererIpcCall = (name: string) =>
-  `window.$$vitePluginElectronActions["${channelName(FILE, name)}"](...args)`;
+  `window.$$vitePluginElectronActions[${JSON.stringify(channelName(FILE, name))}](...args)`;
+
+const mainIpcHandle = (name: string, prefix = "") =>
+  `$vitePluginElectronActions_ipcMain.handle(${JSON.stringify(channelName(FILE, name, prefix))}, (event, ...args) => $vitePluginElectronActions_runAction(event, () => ${name}(...args)))`;
+
+describe("action context", () => {
+  test("throws outside an action", () => {
+    expect(() => getActionContext()).toThrow(/can only be called/);
+  });
+
+  test("exposes the event while an action is running", async () => {
+    const event = { sender: {} } as unknown as IpcMainInvokeEvent;
+
+    await $vitePluginElectronActions_runAction(event, async () => {
+      await Promise.resolve();
+      expect(getActionContext()).toEqual({ event });
+    });
+  });
+});
 
 describe("transform", () => {
   describe("file top-level directive", () => {
@@ -736,10 +759,11 @@ export async function getUser(id) {
     expect(result).toContain(
       `import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"`,
     );
-    // handle call appended
     expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
+      `import { $vitePluginElectronActions_runAction } from "vite-plugin-electron-actions/main"`,
     );
+    // handle call appended
+    expect(result).toContain(mainIpcHandle("getUser"));
     // directive stripped
     expect(result).not.toContain('"use node"');
   });
@@ -755,9 +779,7 @@ export const sum = async (a, b) => {
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
     expect(result).toContain("return a + b");
-    expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "sum")}", (_event, ...args) => sum(...args))`,
-    );
+    expect(result).toContain(mainIpcHandle("sum"));
   });
 
   test("function-level: appends handle call for exported function with directive", () => {
@@ -770,9 +792,7 @@ export async function getUser(id) {
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
     expect(result).toContain("return { id }");
-    expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser")}", (_event, ...args) => getUser(...args))`,
-    );
+    expect(result).toContain(mainIpcHandle("getUser"));
   });
 
   test("function-level: appends handle call for non-exported function with directive", () => {
@@ -785,9 +805,7 @@ async function writeLog(msg) {
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
     expect(result).toContain("return msg");
-    expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
-    );
+    expect(result).toContain(mainIpcHandle("writeLog"));
   });
 
   test("function-level: only handles functions with directive, leaves others untouched", () => {
@@ -803,9 +821,7 @@ export async function withoutDirective() {
 `;
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
-    expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "withDirective")}", (_event, ...args) => withDirective(...args))`,
-    );
+    expect(result).toContain(mainIpcHandle("withDirective"));
     expect(result).not.toContain("withoutDirective(...args)");
   });
 
@@ -818,9 +834,7 @@ const writeLog = async (msg) => {
 `;
     const result = transformForMain(FILE, input);
     expect(result).not.toBeNull();
-    expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "writeLog")}", (_event, ...args) => writeLog(...args))`,
-    );
+    expect(result).toContain(mainIpcHandle("writeLog"));
   });
 
   test("throws when user imports a binding named $vitePluginElectronActions_ipcMain", () => {
@@ -868,6 +882,21 @@ export async function getUser() {
     );
   });
 
+  test("throws when user imports a binding named $vitePluginElectronActions_runAction", () => {
+    const input = `\
+"use node";
+
+import { something as $vitePluginElectronActions_runAction } from "some-other-lib";
+
+export async function getUser() {
+  return {};
+}
+`;
+    expect(() => transformForMain(FILE, input)).toThrow(
+      /\$vitePluginElectronActions_runAction.*reserved/,
+    );
+  });
+
   test("does not throw when user imports ipcMain under a different alias", () => {
     const input = `\
 "use node";
@@ -892,9 +921,7 @@ export async function getUser() {
 `;
     const result = transformForMain(FILE, input, prefix);
     expect(result).not.toBeNull();
-    expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle("${channelName(FILE, "getUser", prefix)}", (_event, ...args) => getUser(...args))`,
-    );
+    expect(result).toContain(mainIpcHandle("getUser", prefix));
   });
 
   test("escapes channelPrefix in handle calls", () => {
@@ -907,11 +934,8 @@ export async function getUser() {
 }
 `;
     const result = transformForMain(FILE, input, prefix);
-    const channel = channelName(FILE, "getUser", prefix);
     expect(result).not.toBeNull();
-    expect(result).toContain(
-      `$vitePluginElectronActions_ipcMain.handle(${JSON.stringify(channel)}, (_event, ...args) => getUser(...args))`,
-    );
+    expect(result).toContain(mainIpcHandle("getUser", prefix));
     expect(() => parseSync("main.ts", result ?? "")).not.toThrow();
   });
 });
