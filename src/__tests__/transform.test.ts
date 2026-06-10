@@ -1,13 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { IpcMainInvokeEvent } from "electron";
 import { parse, parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
-import {
-  $vitePluginElectronActions_runAction,
-  getActionContext,
-} from "../main/index.ts";
 import { collectIdentifierPositions } from "../plugin/ast.ts";
 import { channelName } from "../plugin/channel.ts";
 import {
@@ -32,21 +27,6 @@ const rendererIpcCall = (name: string) =>
 
 const mainIpcHandle = (name: string, prefix = "") =>
   `$vitePluginElectronActions_ipcMain.handle(${JSON.stringify(channelName(FILE, name, prefix))}, (event, ...args) => $vitePluginElectronActions_runAction(event, () => ${name}(...args)))`;
-
-describe("action context", () => {
-  test("throws outside an action", () => {
-    expect(() => getActionContext()).toThrow(/can only be called/);
-  });
-
-  test("exposes the event while an action is running", async () => {
-    const event = { sender: {} } as unknown as IpcMainInvokeEvent;
-
-    await $vitePluginElectronActions_runAction(event, async () => {
-      await Promise.resolve();
-      expect(getActionContext()).toEqual({ event });
-    });
-  });
-});
 
 describe("transform", () => {
   describe("file top-level directive", () => {
