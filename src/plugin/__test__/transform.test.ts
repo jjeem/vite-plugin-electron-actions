@@ -1,23 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { parse, parseSync } from "oxc-parser";
+import { parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
-import { collectIdentifierPositions } from "../plugin/ast.ts";
-import { channelName } from "../plugin/channel.ts";
+import { channelName } from "../channel.ts";
 import {
-  generateChannelsModule,
-  generateHandlersLoaderModule,
-} from "../plugin/codegen.ts";
-import { scanForHandlers } from "../plugin/scanner.ts";
-import {
-  checkFileLevelDirective,
-  checkFunctionLevelDirective,
   transform,
   transformFileLevelDirective,
   transformForMain,
   transformFunctionLevelDirective,
-} from "../plugin/transform.ts";
+} from "../transform.ts";
 
 // Use a fixed absolute file path so channel names are deterministic.
 const FILE = "/file.ts";
@@ -30,55 +19,6 @@ const mainIpcHandle = (name: string, prefix = "") =>
 
 describe("transform", () => {
   describe("file top-level directive", () => {
-    test("identify top-level directive", async () => {
-      const input = `
-      "use node";
-      
-      export function getObject() {
-        return {
-          a: 1,
-          b: true,
-        }
-      }
-      `;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFileLevelDirective(program)).toEqual(true);
-    });
-
-    test("does not confuse function-level directive with top-level directive", async () => {
-      const input = `
-      export function getObject() {
-        "use node";
-        
-        return {
-          a: 1,
-          b: true,
-        }
-      }
-      `;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFileLevelDirective(program)).toEqual(false);
-    });
-
-    test("must return false when top-level directive is not at the top", async () => {
-      const input = `
-      import { something } from "somewhere";
-      "use node";
-
-      export function getObject() {
-        return {
-          a: 1,
-          b: true,
-        }
-      }
-      `;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFileLevelDirective(program)).toEqual(false);
-    });
-
     test("transform file-level that has no imported modules", () => {
       const input = `
 "use node";
@@ -151,112 +91,6 @@ export async function getFile(...args) {
   });
 
   describe("function-level directive", () => {
-    test("identify function-level directive in exported function declaration", async () => {
-      const input = `
-export async function getUser(id) {
-  "use node";
-  return { id };
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(true);
-    });
-
-    test("identify function-level directive in exported arrow function", async () => {
-      const input = `
-export const getUser = async (id) => {
-  "use node";
-  return { id };
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(true);
-    });
-
-    test("identify function-level directive in non-exported function", async () => {
-      const input = `
-function getUser(id) {
-  "use node";
-  return { id };
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(true);
-    });
-
-    test("identify function-level directive in non-exported arrow function", async () => {
-      const input = `
-const getUser = async (id) => {
-  "use node";
-  return { id };
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(true);
-    });
-
-    test("must return false when no function has the directive", async () => {
-      const input = `
-export async function getUser(id) {
-  return { id };
-}
-
-export const sum = async (a, b) => {
-  return a + b;
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(false);
-    });
-
-    test("must return false when file has top-level directive", async () => {
-      const input = `
-"use node";
-
-export async function getUser(id) {
-  "use node";
-  return { id };
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(false);
-    });
-
-    test("identify directive among mixed functions", async () => {
-      const input = `
-export async function noDirective() {
-  return 1;
-}
-
-export async function withDirective() {
-  "use node";
-  return 2;
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(true);
-    });
-
-    test("must return false for directive not at function body top", async () => {
-      const input = `
-export async function getUser(id) {
-  const x = 1;
-  "use node";
-  return { id };
-}
-`;
-
-      const { program } = await parse("test.ts", input);
-      expect(checkFunctionLevelDirective(program)).toEqual(false);
-    });
-
     test("transform exported function with directive", () => {
       const input = `\
 export async function getUser(id) {
@@ -555,25 +389,6 @@ export async function getFile() {
   });
 });
 
-describe("collectIdentifierPositions", () => {
-  test("returns empty map for program with no identifiers", () => {
-    const { program } = parseSync("test.ts", `"use strict";`);
-    const result = collectIdentifierPositions(program);
-    expect(result).toBeInstanceOf(Map);
-    expect(result.size).toBe(0);
-  });
-
-  test("collects positions for identifiers in a simple program", () => {
-    const code = "const foo = 1; const bar = foo + foo;";
-    const { program } = parseSync("test.ts", code);
-    const result = collectIdentifierPositions(program);
-    // foo appears 3 times (declaration + 2 references)
-    expect(result.get("foo")).toHaveLength(3);
-    // bar appears 1 time (declaration)
-    expect(result.get("bar")).toHaveLength(1);
-  });
-});
-
 describe("partial-specifier import removal", () => {
   test("removes only the first specifier when it is exclusively inside a use-node body", () => {
     // readFile is used only in the "use node" body → should be removed
@@ -634,81 +449,6 @@ export async function doWork() {
     expect(result).not.toContain("import");
     expect(result).not.toContain("readFile");
     expect(result).not.toContain("writeFile");
-  });
-});
-
-describe("generateChannelsModule", () => {
-  test("empty registry produces an empty default export", () => {
-    const result = generateChannelsModule(new Map());
-    expect(result).toBe("export default [];");
-  });
-
-  test("generates a channel array entry for a single handler", () => {
-    const channel = channelName("/src/api.ts", "getUser");
-    const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateChannelsModule(registry);
-    expect(result).toContain(`"${channel}"`);
-  });
-
-  test("full channel (including prefix) is in the array", () => {
-    const prefix = "app:";
-    const channel = channelName("/src/api.ts", "getData", prefix);
-    const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateChannelsModule(registry);
-    expect(result).toContain(`"${channel}"`);
-  });
-
-  test("escapes channel strings as JavaScript string literals", () => {
-    const channel = channelName("/src/api.ts", "getData", 'app"\\dev:\n');
-    const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateChannelsModule(registry);
-    expect(result).toContain(JSON.stringify(channel));
-    expect(() => parseSync("channels.ts", result)).not.toThrow();
-  });
-
-  test("throws on duplicate channel strings", () => {
-    const channel = channelName("/src/api.ts", "getUser");
-    // Same channel appearing twice (simulates a hash collision)
-    const registry = new Map([["/src/api.ts", [channel, channel]]]);
-    expect(() => generateChannelsModule(registry)).toThrow(/collision/);
-  });
-});
-
-describe("generateHandlersLoaderModule", () => {
-  test("empty registry produces empty string", () => {
-    const result = generateHandlersLoaderModule(new Map());
-    expect(result).toBe("");
-  });
-
-  test("generates a side-effect import for a single file", () => {
-    const registry = new Map([["/src/api.ts", ["ch:getUser"]]]);
-    const result = generateHandlersLoaderModule(registry);
-    expect(result).toBe(`import "/src/api.ts"`);
-  });
-
-  test("escapes imported file paths as JavaScript string literals", () => {
-    const filePath = '/src/app"dev/api.ts';
-    const registry = new Map([[filePath, ["ch:getUser"]]]);
-    const result = generateHandlersLoaderModule(registry);
-    expect(result).toBe(`import ${JSON.stringify(filePath)}`);
-    expect(() => parseSync("load-handlers.ts", result)).not.toThrow();
-  });
-
-  test("generates one import per file", () => {
-    const registry = new Map([
-      ["/src/users.ts", ["ch:getUser"]],
-      ["/src/posts.ts", ["ch:getPost"]],
-    ]);
-    const result = generateHandlersLoaderModule(registry);
-    expect(result).toContain(`import "/src/users.ts"`);
-    expect(result).toContain(`import "/src/posts.ts"`);
-  });
-
-  test("does not include channel strings — those live in the transformed files", () => {
-    const channel = channelName("/src/api.ts", "getUser");
-    const registry = new Map([["/src/api.ts", [channel]]]);
-    const result = generateHandlersLoaderModule(registry);
-    expect(result).not.toContain(channel);
   });
 });
 
@@ -917,48 +657,5 @@ export async function getUser() {
     expect(result).not.toBeNull();
     expect(result).toContain(mainIpcHandle("getUser", prefix));
     expect(() => parseSync("main.ts", result ?? "")).not.toThrow();
-  });
-});
-
-describe("channelPrefix integration", () => {
-  const setup = (onTestFinished: (fn: () => void) => void) => {
-    const tmpDir = mkdtempSync(path.join(tmpdir(), "ea-test-"));
-    onTestFinished(() => rmSync(tmpDir, { recursive: true, force: true }));
-    const srcDir = path.join(tmpDir, "src");
-    mkdirSync(srcDir);
-    writeFileSync(
-      path.join(srcDir, "api.ts"),
-      `"use node";\nexport async function getUser() { return {}; }\n`,
-    );
-    return { root: tmpDir };
-  };
-
-  test("channelPrefix flows through scanForHandlers → generateHandlersLoaderModule (main env)", ({
-    onTestFinished,
-  }) => {
-    const { root } = setup(onTestFinished);
-    const prefix = "my-app:";
-    const registry = scanForHandlers(["src"], root, prefix);
-    const result = generateHandlersLoaderModule(registry);
-    // Loader module imports real file paths — channels are in the transformed files
-    for (const filePath of registry.keys()) {
-      expect(result).toContain(`"${filePath}"`);
-    }
-  });
-
-  test("channelPrefix flows through scanForHandlers → generateChannelsModule (preload env)", ({
-    onTestFinished,
-  }) => {
-    const { root } = setup(onTestFinished);
-    const prefix = "my-app:";
-    const registry = scanForHandlers(["src"], root, prefix);
-    const result = generateChannelsModule(registry);
-    // Every channel value in the output must start with the prefix
-    for (const channels of registry.values()) {
-      for (const channel of channels) {
-        expect(channel.startsWith(prefix)).toBe(true);
-        expect(result).toContain(`"${channel}"`);
-      }
-    }
   });
 });
