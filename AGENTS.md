@@ -90,7 +90,7 @@ electron-actions/
 │   │   ├── scanner.ts        # scanForHandlers() — filesystem scan for "use node" files
 │   │   └── transform.ts      # transform(), transformFileLevelDirective(), transformFunctionLevelDirective(), transformForMain(), checkReservedIdentifierUsage()
 │   ├── main/
-│   │   └── index.ts          # setupMain(options?) → Promise<true>, notifyWindows(), mainSetupPromise, getActionContext(), $vitePluginElectronActions_runAction() — dynamically imports load-handlers; resolves after all ipcMain.handle() calls are registered
+│   │   └── index.ts          # setupMain(options?) → Promise<true>, notifyWindows(), mainSetupPromise, getActionContext(), $$vitePluginElectronActions_runAction() — dynamically imports load-handlers; resolves after all ipcMain.handle() calls are registered
 │   └── preload/
 │       └── index.ts          # setupPreload() + Window.$$vitePluginElectronActions global type; imports vite-plugin-electron-actions:channels
 ├── src/__tests__/
@@ -140,7 +140,7 @@ import { setupMain } from "vite-plugin-electron-actions/main";
 setupMain();
 ```
 
-Each `"use node"` file in the main build is transformed by `transformForMain()` to keep its real implementation and append `ipcMain.handle()` calls for each handler — no centralized map needed. Each generated handler wraps the real function with `$vitePluginElectronActions_runAction(event, () => handler(...args))`, which lets `getActionContext()` expose the current `IpcMainInvokeEvent` during the action. Because handlers self-register at module load time, side effects run exactly once even if the file is also imported elsewhere in main (the bundler deduplicates by module ID).
+Each `"use node"` file in the main build is transformed by `transformForMain()` to keep its real implementation and append `ipcMain.handle()` calls for each handler — no centralized map needed. Each generated handler wraps the real function with `$$vitePluginElectronActions_runAction(event, () => handler(...args))`, which lets `getActionContext()` expose the current `IpcMainInvokeEvent` during the action. Because handlers self-register at module load time, side effects run exactly once even if the file is also imported elsewhere in main (the bundler deduplicates by module ID).
 
 ### Virtual Module: `vite-plugin-electron-actions:channels`
 

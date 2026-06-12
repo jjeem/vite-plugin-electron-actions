@@ -15,7 +15,7 @@ const rendererIpcCall = (name: string) =>
   `window.$$vitePluginElectronActions[${JSON.stringify(channelName(FILE, name))}](...args)`;
 
 const mainIpcHandle = (name: string, prefix = "") =>
-  `$vitePluginElectronActions_ipcMain.handle(${JSON.stringify(channelName(FILE, name, prefix))}, (event, ...args) => $vitePluginElectronActions_runAction(event, () => ${name}(...args)))`;
+  `$$vitePluginElectronActions_ipcMain.handle(${JSON.stringify(channelName(FILE, name, prefix))}, (event, ...args) => $$vitePluginElectronActions_runAction(event, () => ${name}(...args)))`;
 
 describe("transform", () => {
   describe("file top-level directive", () => {
@@ -477,10 +477,10 @@ export async function getUser(id) {
     expect(result).toContain("db.user.findUnique");
     // ipcMain import injected
     expect(result).toContain(
-      `import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"`,
+      `import { ipcMain as $$vitePluginElectronActions_ipcMain } from "electron"`,
     );
     expect(result).toContain(
-      `import { $vitePluginElectronActions_runAction } from "vite-plugin-electron-actions/main"`,
+      `import { $$vitePluginElectronActions_runAction } from "vite-plugin-electron-actions/main"`,
     );
     // handle call appended
     expect(result).toContain(mainIpcHandle("getUser"));
@@ -557,33 +557,33 @@ const writeLog = async (msg) => {
     expect(result).toContain(mainIpcHandle("writeLog"));
   });
 
-  test("throws when user imports a binding named $vitePluginElectronActions_ipcMain", () => {
+  test("throws when user imports a binding named $$vitePluginElectronActions_ipcMain", () => {
     const input = `\
 "use node";
 
-import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron";
+import { ipcMain as $$vitePluginElectronActions_ipcMain } from "electron";
 
 export async function getUser() {
   return {};
 }
 `;
     expect(() => transformForMain(FILE, input)).toThrow(
-      /\$vitePluginElectronActions_ipcMain.*reserved/,
+      /\$\$vitePluginElectronActions_ipcMain.*reserved/,
     );
   });
 
-  test("throws when user has a variable named $vitePluginElectronActions_ipcMain", () => {
+  test("throws when user has a variable named $$vitePluginElectronActions_ipcMain", () => {
     const input = `\
 "use node";
 
-const $vitePluginElectronActions_ipcMain = "oops";
+const $$vitePluginElectronActions_ipcMain = "oops";
 
 export async function getUser() {
   return {};
 }
 `;
     expect(() => transformForMain(FILE, input)).toThrow(
-      /\$vitePluginElectronActions_ipcMain.*reserved/,
+      /\$\$vitePluginElectronActions_ipcMain.*reserved/,
     );
   });
 
@@ -591,29 +591,29 @@ export async function getUser() {
     const input = `\
 "use node";
 
-import { something as $vitePluginElectronActions_ipcMain } from "some-other-lib";
+import { something as $$vitePluginElectronActions_ipcMain } from "some-other-lib";
 
 export async function getUser() {
   return {};
 }
 `;
     expect(() => transformForMain(FILE, input)).toThrow(
-      /\$vitePluginElectronActions_ipcMain.*reserved/,
+      /\$\$vitePluginElectronActions_ipcMain.*reserved/,
     );
   });
 
-  test("throws when user imports a binding named $vitePluginElectronActions_runAction", () => {
+  test("throws when user imports a binding named $$vitePluginElectronActions_runAction", () => {
     const input = `\
 "use node";
 
-import { something as $vitePluginElectronActions_runAction } from "some-other-lib";
+import { something as $$vitePluginElectronActions_runAction } from "some-other-lib";
 
 export async function getUser() {
   return {};
 }
 `;
     expect(() => transformForMain(FILE, input)).toThrow(
-      /\$vitePluginElectronActions_runAction.*reserved/,
+      /\$\$vitePluginElectronActions_runAction.*reserved/,
     );
   });
 

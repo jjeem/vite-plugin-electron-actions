@@ -284,17 +284,17 @@ The plugin transforms each `"use node"` file in the main process build to keep t
 
 ```typescript
 // src/api.ts — after main-process transform
-import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"
-import { $vitePluginElectronActions_runAction } from "vite-plugin-electron-actions/main"
+import { ipcMain as $$vitePluginElectronActions_ipcMain } from "electron"
+import { $$vitePluginElectronActions_runAction } from "vite-plugin-electron-actions/main"
 import { db } from "./db"
 
 export async function getUser(id: string) {
   return db.users.findUnique({ where: { id } })
 }
 
-$vitePluginElectronActions_ipcMain.handle(
+$$vitePluginElectronActions_ipcMain.handle(
   "a3f2b1c4:getUser",
-  (event, ...args) => $vitePluginElectronActions_runAction(event, () => getUser(...args)),
+  (event, ...args) => $$vitePluginElectronActions_runAction(event, () => getUser(...args)),
 )
 ```
 

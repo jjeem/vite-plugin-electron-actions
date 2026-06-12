@@ -271,8 +271,8 @@ export function transformFunctionLevelDirective(
 
 // ── Reserved identifier guard ──────────────────────────────────
 
-const RESERVED_IPC_MAIN = "$vitePluginElectronActions_ipcMain";
-const RESERVED_RUN_ACTION = "$vitePluginElectronActions_runAction";
+const RESERVED_IPC_MAIN = "$$vitePluginElectronActions_ipcMain";
+const RESERVED_RUN_ACTION = "$$vitePluginElectronActions_runAction";
 const RESERVED_IDENTIFIERS = [RESERVED_IPC_MAIN, RESERVED_RUN_ACTION];
 
 /**

@@ -18,7 +18,7 @@ export function getActionContext(): ElectronActionContext {
   return context;
 }
 
-export function $vitePluginElectronActions_runAction<T>(
+export function $$vitePluginElectronActions_runAction<T>(
   event: IpcMainInvokeEvent,
   action: () => T,
 ): T {
