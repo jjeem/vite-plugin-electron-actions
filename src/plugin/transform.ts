@@ -12,7 +12,7 @@ import {
   checkFunctionLevelDirective,
   hasUseNodeDirective,
 } from "./directives.js";
-import { ipcInvokerArrow, ipcInvokerFn } from "./ipcInvoker.js";
+import { ipcInvokerArrow, ipcInvokerFn } from "./codegen.ts";
 
 // ── Re-exports for external consumers ─────────────────────────
 

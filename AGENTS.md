@@ -83,10 +83,9 @@ electron-actions/
 │   ├── plugin/
 │   │   ├── ast.ts            # AST utilities (collectIdentifierPositions)
 │   │   ├── channel.ts        # channelName() — derives IPC channel from file path, function name, and optional prefix
-│   │   ├── codegen.ts        # generateChannelsModule(), generateHandlersLoaderModule() — virtual module codegen
+│   │   ├── codegen.ts        # generateChannelsModule(), generateHandlersLoaderModule(), ipcInvokerFn(), ipcInvokerArrow() — codegen
 │   │   ├── directives.ts     # checkFileLevelDirective(), checkFunctionLevelDirective()
 │   │   ├── handlers.ts       # extractHandlerNames() — used by scanner
-│   │   ├── ipcInvoker.ts     # ipcInvokerFn(), ipcInvokerArrow() — renderer stub generators
 │   │   ├── scanner.ts        # scanForHandlers() — filesystem scan for "use node" files
 │   │   └── transform.ts      # transform(), transformFileLevelDirective(), transformFunctionLevelDirective(), transformForMain(), checkReservedIdentifierUsage()
 │   ├── main/
