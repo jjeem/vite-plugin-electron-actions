@@ -2,7 +2,7 @@
  * Generate code for the `vite-plugin-electron-actions:channels` virtual module.
  *
  * Produces a default export of `[channelString, ...]` consumed by
- * `setupPreload()` in `src/preload/index.ts`. The full channel string
+ * `setupPreload()` in `src/preload.ts`. The full channel string
  * (including any prefix) is used as both the
  * `window.$$vitePluginElectronActions` key and the
  * `ipcRenderer.invoke` argument, keeping the two in sync automatically.

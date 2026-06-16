@@ -37,12 +37,12 @@
     },
     "./preload": {
       "import": {
-        "types": "./dist/preload/index.d.mts",
-        "default": "./dist/preload/index.mjs"
+        "types": "./dist/preload.d.mts",
+        "default": "./dist/preload.mjs"
       },
       "require": {
-        "types": "./dist/preload/index.d.cts",
-        "default": "./dist/preload/index.cjs"
+        "types": "./dist/preload.d.cts",
+        "default": "./dist/preload.cjs"
       }
     }
   },
