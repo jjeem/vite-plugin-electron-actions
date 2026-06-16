@@ -90,7 +90,7 @@ export default defineConfig({
 
 ### Main process
 
-Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<boolean>` that resolves to `true` when all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
+Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<true>` that resolves once all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
 
 Optionally pass a `windows` array — each `BrowserWindow` will receive a `$$electron-actions:main-setup-complete` IPC event once handlers are ready and the window finishes loading:
 
@@ -164,6 +164,28 @@ export async function createUser(name: string) {
   return db.users.create({ data: { name } })
 }
 ```
+
+### Action context
+
+Use `getActionContext()` inside a `"use node"` function when you need access to the Electron `IpcMainInvokeEvent` that called it:
+
+```typescript
+import { getActionContext } from "vite-plugin-electron-actions/main"
+
+export async function getSenderUrl() {
+  "use node"
+  const { event } = getActionContext()
+  return event.senderFrame.url
+}
+```
+
+Internally, this uses Node's `AsyncLocalStorage` to keep the current IPC event
+available through normal async work inside the action.
+
+> [!WARNING]
+> `getActionContext()` throws if it is called outside a running `"use node"` action.
+> This includes calling the same function directly from the main process, because
+> there is no IPC event context in that case.
 
 ---
 
@@ -268,14 +290,18 @@ The plugin transforms each `"use node"` file in the main process build to keep t
 
 ```typescript
 // src/api.ts — after main-process transform
-import { ipcMain as $vitePluginElectronActions_ipcMain } from "electron"
+import { ipcMain as $$vitePluginElectronActions_ipcMain } from "electron"
+import { $$vitePluginElectronActions_runAction } from "vite-plugin-electron-actions/main"
 import { db } from "./db"
 
 export async function getUser(id: string) {
   return db.users.findUnique({ where: { id } })
 }
 
-$vitePluginElectronActions_ipcMain.handle("a3f2b1c4:getUser", (_event, ...args) => getUser(...args))
+$$vitePluginElectronActions_ipcMain.handle(
+  "a3f2b1c4:getUser",
+  (event, ...args) => $$vitePluginElectronActions_runAction(event, () => getUser(...args)),
+)
 ```
 
 `vite-plugin-electron-actions:load-handlers` is a virtual module that contains one side-effect import per `"use node"` file. It is imported by `vite-plugin-electron-actions/main`

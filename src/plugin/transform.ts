@@ -271,7 +271,9 @@ export function transformFunctionLevelDirective(
 
 // ── Reserved identifier guard ──────────────────────────────────
 
-const RESERVED_IPC_MAIN = "$vitePluginElectronActions_ipcMain";
+const RESERVED_IPC_MAIN = "$$vitePluginElectronActions_ipcMain";
+const RESERVED_RUN_ACTION = "$$vitePluginElectronActions_runAction";
+const RESERVED_IDENTIFIERS = [RESERVED_IPC_MAIN, RESERVED_RUN_ACTION];
 
 /**
  * Throws if the user's source file already declares a binding whose local
@@ -285,9 +287,9 @@ function checkReservedIdentifierUsage(
   for (const node of program.body) {
     if (node.type === "ImportDeclaration") {
       for (const spec of node.specifiers ?? []) {
-        if (spec.local.name === RESERVED_IPC_MAIN) {
+        if (RESERVED_IDENTIFIERS.includes(spec.local.name)) {
           throw new Error(
-            `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your import in ${fileName}.`,
+            `[vite-plugin-electron-actions] The identifier "${spec.local.name}" is reserved by vite-plugin-electron-actions. Please rename your import in ${fileName}.`,
           );
         }
       }
@@ -297,10 +299,10 @@ function checkReservedIdentifierUsage(
       for (const decl of node.declarations) {
         if (
           decl.id.type === "Identifier" &&
-          decl.id.name === RESERVED_IPC_MAIN
+          RESERVED_IDENTIFIERS.includes(decl.id.name)
         ) {
           throw new Error(
-            `[vite-plugin-electron-actions] The identifier "${RESERVED_IPC_MAIN}" is reserved by vite-plugin-electron-actions. Please rename your variable in ${fileName}.`,
+            `[vite-plugin-electron-actions] The identifier "${decl.id.name}" is reserved by vite-plugin-electron-actions. Please rename your variable in ${fileName}.`,
           );
         }
       }
@@ -459,10 +461,12 @@ export function transformForMain(
 
   checkReservedIdentifierUsage(fileName, program);
 
-  s.prepend(`import { ipcMain as ${RESERVED_IPC_MAIN} } from "electron"\n`);
+  s.prepend(
+    `import { ipcMain as ${RESERVED_IPC_MAIN} } from "electron"\nimport { ${RESERVED_RUN_ACTION} } from "vite-plugin-electron-actions/main"\n`,
+  );
   for (const { name, channel } of handlers) {
     s.append(
-      `\n${RESERVED_IPC_MAIN}.handle(${JSON.stringify(channel)}, (_event, ...args) => ${name}(...args))`,
+      `\n${RESERVED_IPC_MAIN}.handle(${JSON.stringify(channel)}, (event, ...args) => ${RESERVED_RUN_ACTION}(event, () => ${name}(...args)))`,
     );
   }
 
