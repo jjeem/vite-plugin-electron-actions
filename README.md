@@ -179,7 +179,10 @@ export async function getSenderUrl() {
 }
 ```
 
-`getActionContext()` throws if it is called outside a running `"use node"` action.
+> [!WARNING]
+> `getActionContext()` throws if it is called outside a running `"use node"` action.
+> This includes calling the same function directly from the main process, because
+> there is no IPC event context in that case.
 
 ---
 
