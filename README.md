@@ -179,6 +179,9 @@ export async function getSenderUrl() {
 }
 ```
 
+Internally, this uses Node's `AsyncLocalStorage` to keep the current IPC event
+available through normal async work inside the action.
+
 > [!WARNING]
 > `getActionContext()` throws if it is called outside a running `"use node"` action.
 > This includes calling the same function directly from the main process, because
