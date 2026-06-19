@@ -4,6 +4,7 @@ import {
   generateChannelsModule,
   generateHandlersLoaderModule,
 } from "./plugin/codegen.js";
+import { type FilePatternInput, splitFilePatterns } from "./plugin/files.js";
 import {
   scanForHandlers,
   transform,
@@ -21,6 +22,14 @@ const RESOLVED_HANDLERS_MAP_ID = "\0vite-plugin-electron-actions-load-handlers";
 const CHANNELS_ID = "vite-plugin-electron-actions:channels";
 const RESOLVED_CHANNELS_ID = "\0vite-plugin-electron-actions-channels";
 
+function createFilesFilter(
+  files: FilePatternInput,
+  root: string,
+): (id: unknown) => boolean {
+  const { include, exclude } = splitFilePatterns(files);
+  return createFilter(include, exclude, { resolve: root });
+}
+
 // ── Plugin ─────────────────────────────────────────────────────
 
 export function electronActions(options: ElectronActionsOptions): Plugin {
@@ -29,19 +38,26 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   const env = options?.env;
 
   if (env === "renderer") {
-    const includePattern = options.include ?? /\.[jt]sx?$/;
-    const filter = createFilter(includePattern, options.exclude);
+    const files = options.files;
+    const channelPrefix = options.channelPrefix ?? "";
+    let root = process.cwd();
+    // Recreate this once Vite provides the resolved root.
+    let fileFilter = createFilesFilter(files, root);
 
     return {
       name: "electron-actions:renderer",
 
-      transform: {
-        filter: { id: includePattern },
-        handler(code, id) {
-          // Guard for Vite < 6.3 where hook filters are not supported.
-          if (!filter(id)) return null;
+      configResolved(config: ResolvedConfig) {
+        root = config.root;
+        fileFilter = createFilesFilter(files, root);
+      },
 
-          const result = transform(code, id, options.channelPrefix ?? "");
+      transform: {
+        handler(code, id) {
+          // Skip files outside the configured glob patterns before parsing.
+          if (!fileFilter(id)) return null;
+
+          const result = transform(code, id, channelPrefix);
           if (!result) return null;
 
           return { code: result, map: null };
@@ -51,17 +67,18 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   if (env === "main") {
-    const includePattern = options.include ?? /\.[jt]sx?$/;
-    const filter = createFilter(includePattern, options.exclude);
-    const scanDirs = options.scanDirs ?? ["src"];
+    const files = options.files;
     const channelPrefix = options.channelPrefix ?? "";
     let root = process.cwd();
+    // Recreate this once Vite provides the resolved root in `configResolved`.
+    let fileFilter = createFilesFilter(files, root);
 
     return {
       name: "electron-actions:main",
 
       configResolved(config: ResolvedConfig) {
         root = config.root;
+        fileFilter = createFilesFilter(files, root);
       },
 
       resolveId(id) {
@@ -71,7 +88,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
 
       load(id) {
         if (id === RESOLVED_HANDLERS_MAP_ID) {
-          const registry = scanForHandlers(scanDirs, root, channelPrefix);
+          const registry = scanForHandlers(files, root, channelPrefix);
           return generateHandlersLoaderModule(registry);
         }
 
@@ -79,10 +96,9 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
       },
 
       transform: {
-        filter: { id: includePattern },
         handler(code, id) {
-          // Guard for Vite < 6.3 where hook filters are not supported.
-          if (!filter(id)) return null;
+          // Skip files outside the configured glob patterns before parsing.
+          if (!fileFilter(id)) return null;
 
           const result = transformForMain(id, code, channelPrefix);
           if (!result) return null;
@@ -94,7 +110,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   if (env === "preload") {
-    const scanDirs = options.scanDirs ?? ["src"];
+    const files = options.files;
     const channelPrefix = options.channelPrefix ?? "";
     let root = process.cwd();
 
@@ -112,7 +128,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
 
       load(id) {
         if (id === RESOLVED_CHANNELS_ID) {
-          const registry = scanForHandlers(scanDirs, root, channelPrefix);
+          const registry = scanForHandlers(files, root, channelPrefix);
           return generateChannelsModule(registry);
         }
 

@@ -31,7 +31,7 @@ export default defineConfig({
       {
         entry: "electron/main.ts",
         vite: {
-          plugins: [electronActions({ env: "main", scanDirs: ["src"] })],
+          plugins: [electronActions({ env: "main" })],
         },
         preload: {
           input: "electron/preload.ts",
@@ -222,15 +222,11 @@ electronActions({
   // Required: which Vite build environment this instance serves
   env: "renderer" | "main" | "preload",
 
-  // Files to include (default: all .js/.ts/.jsx/.tsx)
-  include: /\.[jt]sx?$/,
-
-  // Files to exclude
-  exclude: /node_modules/,
-
-  // Directories to scan for handlers (default: ["src"])
-  // Paths are relative to the Vite root.
-  scanDirs: ["src"],
+  // Glob pattern(s) to process and scan for handlers.
+  // Paths are relative to the Vite root. Negated patterns exclude files.
+  // At least one non-negated include pattern is required.
+  // Default: "src/**/*.{js,ts,jsx,tsx}"
+  files: ["src/**/*.{js,ts,jsx,tsx}", "!src/**/*.test.{ts,tsx}"],
 
   // Optional prefix prepended to every IPC channel name (default: "")
   // Useful when multiple plugin instances need isolated handler sets
@@ -240,7 +236,7 @@ electronActions({
 ```
 
 > [!IMPORTANT]
-> `scanDirs` defaults to `["src"]` and should point to the directories that contain your `"use node"` files — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by walking the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), you must set this option accordingly, otherwise the main process will not register those handlers.
+> `files` defaults to `"src/**/*.{js,ts,jsx,tsx}"` and should match every file that can contain `"use node"` handlers — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by globbing the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), set this option accordingly, otherwise the main process will not register those handlers.
 
 ---
 

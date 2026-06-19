@@ -152,7 +152,7 @@ import { setupPreload } from "vite-plugin-electron-actions/preload";
 setupPreload();
 ```
 
-The plugin scans `scanDirs` (default `["src"]`) at build time to discover all handlers.
+The plugin scans `files` (default `"src/**/*.{js,ts,jsx,tsx}"`) at build time to discover all handlers.
 
 ### Virtual Module: `vite-plugin-electron-actions/preload`
 
