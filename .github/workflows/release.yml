@@ -1,24 +1,20 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: [CI]
-    branches: [release]
-    types: [completed]
+  push:
+    tags:
+      - "v*"
 
 jobs:
   release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
     environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write  # Required for OIDC
+      id-token: write # Required for OIDC
 
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - uses: pnpm/action-setup@v6
         with:
@@ -38,9 +34,15 @@ jobs:
         id: version
         run: |
           VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
           NPM_TAG="$(node -p "const version = require('./package.json').version; const match = version.match(/^[^-]+-([0-9A-Za-z-]+)/); match ? match[1] : 'latest'")"
 
-          echo "value=v$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_name }}" != "$TAG" ]; then
+            echo "Tag ${{ github.ref_name }} does not match package version $TAG"
+            exit 1
+          fi
+
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
           echo "npm_tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
           if [ "$NPM_TAG" = "latest" ]; then
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
@@ -60,9 +62,8 @@ jobs:
 
           gh release create ${{ steps.version.outputs.value }} \
             $PRERELEASE_FLAG \
-            --target "${{ github.event.workflow_run.head_sha }}" \
             --title "${{ steps.version.outputs.value }}" \
             --generate-notes \
-            --verify-tag=false
+            --verify-tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
