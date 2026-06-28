@@ -77,7 +77,7 @@ export interface SetupMainOptions {
  * Call this in your Electron main process to register all `ipcMain.handle()`
  * calls for functions marked with `"use node"`.
  *
- * Requires `electronActions({ env: "main" })` in your Vite config.
+ * Requires the `main` plugin from `electronActions()` in your Vite config.
  *
  * Returns a promise that resolves once all handlers are registered.
  * The same promise is available as the exported `mainSetupPromise`.

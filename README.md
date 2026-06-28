@@ -14,7 +14,7 @@ npm install -D vite-plugin-electron-actions
 
 ## Setup
 
-The plugin must be registered **three times** — once for each Vite build environment — each with the appropriate `env` value.
+Call `electronActions()` once, then register the returned plugin instances in the matching Vite build environments.
 
 ### With `vite-plugin-electron`
 
@@ -24,19 +24,21 @@ import { electronActions } from "vite-plugin-electron-actions"
 import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
 
+const { renderer, main, preload } = electronActions()
+
 export default defineConfig({
   plugins: [
-    electronActions({ env: "renderer" }),
+    renderer,
     electron([
       {
         entry: "electron/main.ts",
         vite: {
-          plugins: [electronActions({ env: "main" })],
+          plugins: [main],
         },
         preload: {
           input: "electron/preload.ts",
           vite: {
-            plugins: [electronActions({ env: "preload" })],
+            plugins: [preload],
           },
         },
       },
@@ -53,8 +55,10 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
+const { renderer } = electronActions()
+
 export default defineConfig({
-  plugins: [electronActions({ env: "renderer" })],
+  plugins: [renderer],
 })
 ```
 
@@ -64,12 +68,14 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
+const { main } = electronActions()
+
 export default defineConfig({
   build: {
     lib: { entry: "electron/main.ts", formats: ["cjs"] },
     rollupOptions: { external: ["electron"] },
   },
-  plugins: [electronActions({ env: "main" })],
+  plugins: [main],
 })
 ```
 
@@ -79,12 +85,14 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
+const { preload } = electronActions()
+
 export default defineConfig({
   build: {
     lib: { entry: "electron/preload.ts", formats: ["cjs"] },
     rollupOptions: { external: ["electron"] },
   },
-  plugins: [electronActions({ env: "preload" })],
+  plugins: [preload],
 })
 ```
 
@@ -219,9 +227,6 @@ Other exports (`export const x = 5`) are silently stripped from the Renderer bun
 
 ```typescript
 electronActions({
-  // Required: which Vite build environment this instance serves
-  env: "renderer" | "main" | "preload",
-
   // Glob pattern(s) to process and scan for handlers.
   // Paths are relative to the Vite root. Negated patterns exclude files.
   // At least one non-negated include pattern is required.

@@ -1,13 +1,6 @@
+import type { Plugin } from "vite";
+
 export interface ElectronActionsOptions {
-  /**
-   * The Electron build environment this plugin instance is for.
-   *
-   * Register the plugin once per Vite config with the matching env:
-   * - `"renderer"` — transforms `"use node"` files into IPC stubs
-   * - `"main"`     — generates the `setupMain()` implementation
-   * - `"preload"`  — generates the `setupPreload()` implementation
-   */
-  env: "renderer" | "main" | "preload";
   /**
    * Glob pattern(s) matched relative to the Vite root.
    * Only matching files are processed and scanned for `"use node"` handlers.
@@ -25,4 +18,10 @@ export interface ElectronActionsOptions {
    * @default ""
    */
   channelPrefix?: string;
+}
+
+export interface ElectronActionsPlugins {
+  renderer: Plugin;
+  main: Plugin;
+  preload: Plugin;
 }

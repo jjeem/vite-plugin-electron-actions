@@ -15,7 +15,7 @@ declare global {
  * Call this in your preload script to expose all `"use node"` functions
  * to the renderer via contextBridge, each locked to its own IPC channel.
  *
- * Requires `electronActions({ env: "preload" })` in your Vite config.
+ * Requires the `preload` plugin from `electronActions()` in your Vite config.
  */
 export function setupPreload(): void {
   const api: Record<string, (...args: unknown[]) => Promise<unknown>> = {};

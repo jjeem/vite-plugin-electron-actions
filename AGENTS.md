@@ -77,8 +77,8 @@ Key rules enforced:
 ```
 electron-actions/
 ├── src/
-│   ├── index.ts              # Vite plugin entry: electronActions({ env }), three env-specific branches
-│   ├── types.ts              # ElectronActionsOptions type (env field required)
+│   ├── index.ts              # Vite plugin entry: electronActions() returns renderer/main/preload plugins
+│   ├── types.ts              # ElectronActionsOptions and ElectronActionsPlugins types
 │   ├── virtual.d.ts          # Ambient type declarations for vite-plugin-electron-actions:channels (string[]) and vite-plugin-electron-actions:load-handlers
 │   ├── preload.ts            # setupPreload() + Window.$$vitePluginElectronActions global type; imports vite-plugin-electron-actions:channels
 │   ├── plugin/
@@ -174,25 +174,27 @@ declared with `"use node"`.
 
 ### Plugin Registration
 
-The plugin must be registered in **three places** in `vite.config.ts` — once for the
-renderer build, once for the main process build, and once for the preload build (all run
-in isolated Vite instances):
+Call `electronActions()` once, then register the returned plugins in **three places** in
+`vite.config.ts` — once for the renderer build, once for the main process build, and once
+for the preload build (all run in isolated Vite instances):
 
 ```ts
 import { electronActions } from "vite-plugin-electron-actions";
 
+const { renderer, main, preload } = electronActions();
+
 export default defineConfig({
-  plugins: [electronActions({ env: "renderer" })],
+  plugins: [renderer],
   // ...
   electron([{
     entry: "electron/main.ts",
     vite: {
-      plugins: [electronActions({ env: "main" })],
+      plugins: [main],
     },
     preload: {
       input: "electron/preload.ts",
       vite: {
-        plugins: [electronActions({ env: "preload" })],
+        plugins: [preload],
       },
     },
   }]),

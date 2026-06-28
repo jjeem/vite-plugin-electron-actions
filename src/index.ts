@@ -10,7 +10,10 @@ import {
   transform,
   transformForMain,
 } from "./plugin/transform.js";
-import type { ElectronActionsOptions } from "./types.js";
+import type {
+  ElectronActionsOptions,
+  ElectronActionsPlugins,
+} from "./types.js";
 
 // ── Internal virtual module IDs ────────────────────────────────
 
@@ -32,11 +35,22 @@ function createFilesFilter(
 
 // ── Plugin ─────────────────────────────────────────────────────
 
-export function electronActions(options: ElectronActionsOptions): Plugin {
-  // The optional chaining ("options?.env") is to help display a more specific
-  // error message if the user forgets to pass an options object
-  const env = options?.env;
+type ElectronActionsEnv = "renderer" | "main" | "preload";
 
+export function electronActions(
+  options: ElectronActionsOptions = {},
+): ElectronActionsPlugins {
+  return {
+    renderer: createElectronActionsPlugin("renderer", options),
+    main: createElectronActionsPlugin("main", options),
+    preload: createElectronActionsPlugin("preload", options),
+  };
+}
+
+function createElectronActionsPlugin(
+  env: ElectronActionsEnv,
+  options: ElectronActionsOptions,
+): Plugin {
   if (env === "renderer") {
     const files = options.files;
     const channelPrefix = options.channelPrefix ?? "";
@@ -138,8 +152,11 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   throw new Error(
-    `[vite-plugin-electron-actions] Unknown env: "${env}". Must be "renderer", "main", or "preload".`,
+    `[vite-plugin-electron-actions] Unknown internal env: "${env}".`,
   );
 }
 
-export type { ElectronActionsOptions } from "./types.js";
+export type {
+  ElectronActionsOptions,
+  ElectronActionsPlugins,
+} from "./types.js";
