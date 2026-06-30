@@ -7,12 +7,12 @@ import {
 } from "oxc-parser";
 import { collectIdentifierPositions } from "./ast.js";
 import { channelName } from "./channel.js";
+import { ipcInvokerArrow, ipcInvokerFn } from "./codegen.ts";
 import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
   hasUseNodeDirective,
 } from "./directives.js";
-import { ipcInvokerArrow, ipcInvokerFn } from "./ipcInvoker.js";
 
 // ── Re-exports for external consumers ─────────────────────────
 

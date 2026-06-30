@@ -15,61 +15,65 @@ export function extractHandlerNames(
   const names: string[] = [];
 
   for (const node of program.body) {
-    if (node.type === "ExportNamedDeclaration") {
+    if (fileLevel) {
+      if (node.type !== "ExportNamedDeclaration") continue;
+
       const { declaration } = node;
 
       if (declaration?.type === "FunctionDeclaration") {
-        if (fileLevel) {
-          if (declaration.async && declaration.id?.type === "Identifier") {
-            names.push(declaration.id.name);
-          }
-        } else {
-          if (
-            declaration.id?.type === "Identifier" &&
-            hasUseNodeDirective(declaration.body)
-          ) {
-            names.push(declaration.id.name);
-          }
+        const id = declaration.id;
+        const isNamedAsyncFunction =
+          declaration.async && id?.type === "Identifier";
+
+        if (isNamedAsyncFunction) {
+          names.push(id.name);
         }
       }
 
       if (declaration?.type === "VariableDeclaration") {
         for (const decl of declaration.declarations) {
-          if (
-            decl.init?.type === "ArrowFunctionExpression" &&
-            decl.id.type === "Identifier"
-          ) {
-            if (fileLevel) {
-              if (decl.init.async) {
-                names.push(decl.id.name);
-              }
-            } else {
-              if (hasUseNodeDirective(decl.init.body)) {
-                names.push(decl.id.name);
-              }
-            }
+          const id = decl.id;
+          const init = decl.init;
+          const isNamedAsyncArrowFunction =
+            init?.type === "ArrowFunctionExpression" &&
+            init.async &&
+            id.type === "Identifier";
+
+          if (isNamedAsyncArrowFunction) {
+            names.push(id.name);
           }
         }
+      }
+
+      continue;
+    }
+
+    const declaration =
+      node.type === "ExportNamedDeclaration" ? node.declaration : node;
+
+    if (declaration?.type === "FunctionDeclaration") {
+      const id = declaration.id;
+      const isNamedFunction = id?.type === "Identifier";
+      const hasFunctionLevelDirective = hasUseNodeDirective(declaration.body);
+
+      if (isNamedFunction && hasFunctionLevelDirective) {
+        names.push(id.name);
       }
     }
 
-    // function-level only: non-exported functions with "use node"
-    if (!fileLevel) {
-      if (node.type === "FunctionDeclaration") {
-        if (node.id?.type === "Identifier" && hasUseNodeDirective(node.body)) {
-          names.push(node.id.name);
-        }
-      }
+    if (declaration?.type === "VariableDeclaration") {
+      for (const decl of declaration.declarations) {
+        const id = decl.id;
+        const init = decl.init;
+        const isNamedArrowFunction =
+          init?.type === "ArrowFunctionExpression" && id.type === "Identifier";
 
-      if (node.type === "VariableDeclaration") {
-        for (const decl of node.declarations) {
-          if (
-            decl.init?.type === "ArrowFunctionExpression" &&
-            decl.id.type === "Identifier" &&
-            hasUseNodeDirective(decl.init.body)
-          ) {
-            names.push(decl.id.name);
-          }
+        if (!isNamedArrowFunction) continue;
+
+        const hasFunctionLevelDirective = hasUseNodeDirective(init.body);
+
+        if (hasFunctionLevelDirective) {
+          names.push(id.name);
         }
       }
     }

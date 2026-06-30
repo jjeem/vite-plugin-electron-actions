@@ -17,10 +17,11 @@ export function hasUseNodeDirective(
 ): body is BlockStatement | FunctionBody {
   if (body?.type !== "BlockStatement") return false;
   const firstStmt = body.body?.[0];
-  return (
+  const hasDirective =
     firstStmt?.type === "ExpressionStatement" &&
-    firstStmt.directive === "use node"
-  );
+    firstStmt.directive === "use node";
+
+  return hasDirective;
 }
 
 export function checkFunctionLevelDirective(program: Program): boolean {
@@ -29,12 +30,15 @@ export function checkFunctionLevelDirective(program: Program): boolean {
   for (const node of program.body) {
     if (node.type === "ExportNamedDeclaration") {
       const { declaration } = node;
+      const declarationType = declaration?.type;
 
-      if (declaration?.type === "FunctionDeclaration") {
+      if (!declarationType) continue;
+
+      if (declarationType === "FunctionDeclaration") {
         if (hasUseNodeDirective(declaration.body)) return true;
       }
 
-      if (declaration?.type === "VariableDeclaration") {
+      if (declarationType === "VariableDeclaration") {
         for (const decl of declaration.declarations) {
           if (decl.init?.type === "ArrowFunctionExpression") {
             if (hasUseNodeDirective(decl.init.body)) return true;

@@ -77,22 +77,21 @@ Key rules enforced:
 ```
 electron-actions/
 ├── src/
-│   ├── index.ts              # Vite plugin entry: electronActions({ env }), three env-specific branches
-│   ├── types.ts              # ElectronActionsOptions type (env field required)
+│   ├── index.ts              # Vite plugin entry: electronActions() returns renderer/main/preload plugins
+│   ├── types.ts              # ElectronActionsOptions and ElectronActionsPlugins types
 │   ├── virtual.d.ts          # Ambient type declarations for vite-plugin-electron-actions:channels (string[]) and vite-plugin-electron-actions:load-handlers
+│   ├── preload.ts            # setupPreload() + Window.$$vitePluginElectronActions global type; imports vite-plugin-electron-actions:channels
 │   ├── plugin/
 │   │   ├── ast.ts            # AST utilities (collectIdentifierPositions)
 │   │   ├── channel.ts        # channelName() — derives IPC channel from file path, function name, and optional prefix
-│   │   ├── codegen.ts        # generateChannelsModule(), generateHandlersLoaderModule() — virtual module codegen
+│   │   ├── codegen.ts        # generateChannelsModule(), generateHandlersLoaderModule(), ipcInvokerFn(), ipcInvokerArrow() — codegen
 │   │   ├── directives.ts     # checkFileLevelDirective(), checkFunctionLevelDirective()
 │   │   ├── handlers.ts       # extractHandlerNames() — used by scanner
-│   │   ├── ipcInvoker.ts     # ipcInvokerFn(), ipcInvokerArrow() — renderer stub generators
 │   │   ├── scanner.ts        # scanForHandlers() — filesystem scan for "use node" files
 │   │   └── transform.ts      # transform(), transformFileLevelDirective(), transformFunctionLevelDirective(), transformForMain(), checkReservedIdentifierUsage()
 │   ├── main/
-│   │   └── index.ts          # setupMain(options?) → Promise<true>, notifyWindows(), mainSetupPromise, getActionContext(), $$vitePluginElectronActions_runAction() — dynamically imports load-handlers; resolves after all ipcMain.handle() calls are registered
-│   └── preload/
-│       └── index.ts          # setupPreload() + Window.$$vitePluginElectronActions global type; imports vite-plugin-electron-actions:channels
+│   │   ├── action-context.ts  # getActionContext() + $$vitePluginElectronActions_runAction()
+│   │   └── index.ts          # setupMain(options?) → Promise<true>, notifyWindows(), mainSetupPromise — dynamically imports load-handlers; resolves after all ipcMain.handle() calls are registered
 ├── src/__tests__/
 │   └── transform.test.ts     # vitest tests covering transform, directives, and codegen
 ├── dist/                     # Built output (gitignored)
@@ -102,8 +101,7 @@ electron-actions/
 │   ├── index.d.cts           # CJS type declarations
 │   ├── main/
 │   │   └── index.mjs         # ESM build (main entry — setupMain)
-│   └── preload/
-│       └── index.mjs         # ESM build (preload entry — setupPreload)
+│   └── preload.mjs           # ESM build (preload entry — setupPreload)
 ```
 
 ## How the Plugin Works
@@ -147,14 +145,14 @@ Each `"use node"` file in the main build is transformed by `transformForMain()` 
 Intercepted by the `env:"preload"` plugin. Generates a data-only default export of
 `[channelString, ...]` (an array). The full channel string (including any prefix) is used
 as both the `window.$$vitePluginElectronActions` key and the `ipcRenderer.invoke` argument. `setupPreload()` in
-`src/preload/index.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`:
+`src/preload.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`:
 
 ```ts
 import { setupPreload } from "vite-plugin-electron-actions/preload";
 setupPreload();
 ```
 
-The plugin scans `scanDirs` (default `["src"]`) at build time to discover all handlers.
+The plugin scans `files` (default `"src/**/*.{js,ts,jsx,tsx}"`) at build time to discover all handlers.
 
 ### Virtual Module: `vite-plugin-electron-actions/preload`
 
@@ -176,25 +174,27 @@ declared with `"use node"`.
 
 ### Plugin Registration
 
-The plugin must be registered in **three places** in `vite.config.ts` — once for the
-renderer build, once for the main process build, and once for the preload build (all run
-in isolated Vite instances):
+Call `electronActions()` once, then register the returned plugins in **three places** in
+`vite.config.ts` — once for the renderer build, once for the main process build, and once
+for the preload build (all run in isolated Vite instances):
 
 ```ts
 import { electronActions } from "vite-plugin-electron-actions";
 
+const { renderer, main, preload } = electronActions();
+
 export default defineConfig({
-  plugins: [electronActions({ env: "renderer" })],
+  plugins: [renderer],
   // ...
   electron([{
     entry: "electron/main.ts",
     vite: {
-      plugins: [electronActions({ env: "main" })],
+      plugins: [main],
     },
     preload: {
       input: "electron/preload.ts",
       vite: {
-        plugins: [electronActions({ env: "preload" })],
+        plugins: [preload],
       },
     },
   }]),

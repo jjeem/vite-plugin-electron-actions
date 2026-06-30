@@ -4,12 +4,16 @@ import {
   generateChannelsModule,
   generateHandlersLoaderModule,
 } from "./plugin/codegen.js";
+import { type FilePatternInput, splitFilePatterns } from "./plugin/files.js";
 import {
   scanForHandlers,
   transform,
   transformForMain,
 } from "./plugin/transform.js";
-import type { ElectronActionsOptions } from "./types.js";
+import type {
+  ElectronActionsOptions,
+  ElectronActionsPlugins,
+} from "./types.js";
 
 // ── Internal virtual module IDs ────────────────────────────────
 
@@ -21,27 +25,53 @@ const RESOLVED_HANDLERS_MAP_ID = "\0vite-plugin-electron-actions-load-handlers";
 const CHANNELS_ID = "vite-plugin-electron-actions:channels";
 const RESOLVED_CHANNELS_ID = "\0vite-plugin-electron-actions-channels";
 
+function createFilesFilter(
+  files: FilePatternInput,
+  root: string,
+): (id: unknown) => boolean {
+  const { include, exclude } = splitFilePatterns(files);
+  return createFilter(include, exclude, { resolve: root });
+}
+
 // ── Plugin ─────────────────────────────────────────────────────
 
-export function electronActions(options: ElectronActionsOptions): Plugin {
-  // The optional chaining ("options?.env") is to help display a more specific
-  // error message if the user forgets to pass an options object
-  const env = options?.env;
+type ElectronActionsEnv = "renderer" | "main" | "preload";
 
+export function electronActions(
+  options: ElectronActionsOptions = {},
+): ElectronActionsPlugins {
+  return {
+    renderer: createElectronActionsPlugin("renderer", options),
+    main: createElectronActionsPlugin("main", options),
+    preload: createElectronActionsPlugin("preload", options),
+  };
+}
+
+function createElectronActionsPlugin(
+  env: ElectronActionsEnv,
+  options: ElectronActionsOptions,
+): Plugin {
   if (env === "renderer") {
-    const includePattern = options.include ?? /\.[jt]sx?$/;
-    const filter = createFilter(includePattern, options.exclude);
+    const files = options.files;
+    const channelPrefix = options.channelPrefix ?? "";
+    let root = process.cwd();
+    // Recreate this once Vite provides the resolved root.
+    let fileFilter = createFilesFilter(files, root);
 
     return {
       name: "electron-actions:renderer",
 
-      transform: {
-        filter: { id: includePattern },
-        handler(code, id) {
-          // Guard for Vite < 6.3 where hook filters are not supported.
-          if (!filter(id)) return null;
+      configResolved(config: ResolvedConfig) {
+        root = config.root;
+        fileFilter = createFilesFilter(files, root);
+      },
 
-          const result = transform(code, id, options.channelPrefix ?? "");
+      transform: {
+        handler(code, id) {
+          // Skip files outside the configured glob patterns before parsing.
+          if (!fileFilter(id)) return null;
+
+          const result = transform(code, id, channelPrefix);
           if (!result) return null;
 
           return { code: result, map: null };
@@ -51,17 +81,18 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   if (env === "main") {
-    const includePattern = options.include ?? /\.[jt]sx?$/;
-    const filter = createFilter(includePattern, options.exclude);
-    const scanDirs = options.scanDirs ?? ["src"];
+    const files = options.files;
     const channelPrefix = options.channelPrefix ?? "";
     let root = process.cwd();
+    // Recreate this once Vite provides the resolved root in `configResolved`.
+    let fileFilter = createFilesFilter(files, root);
 
     return {
       name: "electron-actions:main",
 
       configResolved(config: ResolvedConfig) {
         root = config.root;
+        fileFilter = createFilesFilter(files, root);
       },
 
       resolveId(id) {
@@ -71,7 +102,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
 
       load(id) {
         if (id === RESOLVED_HANDLERS_MAP_ID) {
-          const registry = scanForHandlers(scanDirs, root, channelPrefix);
+          const registry = scanForHandlers(files, root, channelPrefix);
           return generateHandlersLoaderModule(registry);
         }
 
@@ -79,10 +110,9 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
       },
 
       transform: {
-        filter: { id: includePattern },
         handler(code, id) {
-          // Guard for Vite < 6.3 where hook filters are not supported.
-          if (!filter(id)) return null;
+          // Skip files outside the configured glob patterns before parsing.
+          if (!fileFilter(id)) return null;
 
           const result = transformForMain(id, code, channelPrefix);
           if (!result) return null;
@@ -94,7 +124,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   if (env === "preload") {
-    const scanDirs = options.scanDirs ?? ["src"];
+    const files = options.files;
     const channelPrefix = options.channelPrefix ?? "";
     let root = process.cwd();
 
@@ -112,7 +142,7 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
 
       load(id) {
         if (id === RESOLVED_CHANNELS_ID) {
-          const registry = scanForHandlers(scanDirs, root, channelPrefix);
+          const registry = scanForHandlers(files, root, channelPrefix);
           return generateChannelsModule(registry);
         }
 
@@ -122,8 +152,11 @@ export function electronActions(options: ElectronActionsOptions): Plugin {
   }
 
   throw new Error(
-    `[vite-plugin-electron-actions] Unknown env: "${env}". Must be "renderer", "main", or "preload".`,
+    `[vite-plugin-electron-actions] Unknown internal env: "${env}".`,
   );
 }
 
-export type { ElectronActionsOptions } from "./types.js";
+export type {
+  ElectronActionsOptions,
+  ElectronActionsPlugins,
+} from "./types.js";

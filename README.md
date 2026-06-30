@@ -14,7 +14,7 @@ npm install -D vite-plugin-electron-actions
 
 ## Setup
 
-The plugin must be registered **three times** — once for each Vite build environment — each with the appropriate `env` value.
+Call `electronActions()` once, then register the returned plugin instances in the matching Vite build environments.
 
 ### With `vite-plugin-electron`
 
@@ -24,19 +24,21 @@ import { electronActions } from "vite-plugin-electron-actions"
 import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
 
+const { renderer, main, preload } = electronActions()
+
 export default defineConfig({
   plugins: [
-    electronActions({ env: "renderer" }),
+    renderer,
     electron([
       {
         entry: "electron/main.ts",
         vite: {
-          plugins: [electronActions({ env: "main", scanDirs: ["src"] })],
+          plugins: [main],
         },
         preload: {
           input: "electron/preload.ts",
           vite: {
-            plugins: [electronActions({ env: "preload" })],
+            plugins: [preload],
           },
         },
       },
@@ -53,8 +55,10 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
+const { renderer } = electronActions()
+
 export default defineConfig({
-  plugins: [electronActions({ env: "renderer" })],
+  plugins: [renderer],
 })
 ```
 
@@ -64,12 +68,14 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
+const { main } = electronActions()
+
 export default defineConfig({
   build: {
     lib: { entry: "electron/main.ts", formats: ["cjs"] },
     rollupOptions: { external: ["electron"] },
   },
-  plugins: [electronActions({ env: "main" })],
+  plugins: [main],
 })
 ```
 
@@ -79,12 +85,14 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
+const { preload } = electronActions()
+
 export default defineConfig({
   build: {
     lib: { entry: "electron/preload.ts", formats: ["cjs"] },
     rollupOptions: { external: ["electron"] },
   },
-  plugins: [electronActions({ env: "preload" })],
+  plugins: [preload],
 })
 ```
 
@@ -219,18 +227,11 @@ Other exports (`export const x = 5`) are silently stripped from the Renderer bun
 
 ```typescript
 electronActions({
-  // Required: which Vite build environment this instance serves
-  env: "renderer" | "main" | "preload",
-
-  // Files to include (default: all .js/.ts/.jsx/.tsx)
-  include: /\.[jt]sx?$/,
-
-  // Files to exclude
-  exclude: /node_modules/,
-
-  // Directories to scan for handlers (default: ["src"])
-  // Paths are relative to the Vite root.
-  scanDirs: ["src"],
+  // Glob pattern(s) to process and scan for handlers.
+  // Paths are relative to the Vite root. Negated patterns exclude files.
+  // At least one non-negated include pattern is required.
+  // Default: "src/**/*.{js,ts,jsx,tsx}"
+  files: ["src/**/*.{js,ts,jsx,tsx}", "!src/**/*.test.{ts,tsx}"],
 
   // Optional prefix prepended to every IPC channel name (default: "")
   // Useful when multiple plugin instances need isolated handler sets
@@ -240,7 +241,7 @@ electronActions({
 ```
 
 > [!IMPORTANT]
-> `scanDirs` defaults to `["src"]` and should point to the directories that contain your `"use node"` files — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by walking the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), you must set this option accordingly, otherwise the main process will not register those handlers.
+> `files` defaults to `"src/**/*.{js,ts,jsx,tsx}"` and should match every file that can contain `"use node"` handlers — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by globbing the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), set this option accordingly, otherwise the main process will not register those handlers.
 
 ---
 
@@ -322,7 +323,7 @@ export default [
 ]
 ```
 
-`setupPreload()` in `src/preload/index.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
+`setupPreload()` in `src/preload.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
 
 ### IPC channel names
 
