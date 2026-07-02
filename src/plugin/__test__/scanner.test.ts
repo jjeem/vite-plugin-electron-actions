@@ -22,13 +22,6 @@ describe("scanForHandlers", () => {
     return { apiFile, root: tmpDir, srcDir };
   };
 
-  test("uses the default files glob", ({ onTestFinished }) => {
-    const { apiFile, root } = setup(onTestFinished);
-    const registry = scanForHandlers(undefined, root);
-
-    expect([...registry.keys()]).toEqual([apiFile]);
-  });
-
   test("discovers handlers from matching glob patterns", ({
     onTestFinished,
   }) => {
@@ -36,6 +29,14 @@ describe("scanForHandlers", () => {
     const registry = scanForHandlers("src/api.ts", root);
 
     expect([...registry.keys()]).toEqual([apiFile]);
+  });
+
+  test("ignores files outside matching glob patterns", ({ onTestFinished }) => {
+    const { apiFile, root } = setup(onTestFinished);
+    const registry = scanForHandlers("src/missing.ts", root);
+
+    expect([...registry.keys()]).not.toContain(apiFile);
+    expect(registry.size).toBe(0);
   });
 
   test("honors negated glob patterns", ({ onTestFinished }) => {

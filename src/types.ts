@@ -7,10 +7,8 @@ export interface ElectronActionsOptions {
    * Negated patterns prefixed with `!` exclude files.
    * At least one non-negated include pattern is required.
    * Applies to all envs.
-   *
-   * @default all `.js/.ts/.jsx/.tsx` files under `src/`
    */
-  files?: string | readonly string[];
+  files: string | readonly string[];
   /**
    * Optional prefix prepended to every IPC channel name.
    * Applies to `main` and `preload` envs.

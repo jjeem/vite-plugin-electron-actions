@@ -24,7 +24,9 @@ import { electronActions } from "vite-plugin-electron-actions"
 import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
 
-const { renderer, main, preload } = electronActions()
+const { renderer, main, preload } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   plugins: [
@@ -55,7 +57,9 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
-const { renderer } = electronActions()
+const { renderer } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   plugins: [renderer],
@@ -68,7 +72,9 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
-const { main } = electronActions()
+const { main } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   build: {
@@ -85,7 +91,9 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
-const { preload } = electronActions()
+const { preload } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   build: {
@@ -227,10 +235,9 @@ Other exports (`export const x = 5`) are silently stripped from the Renderer bun
 
 ```typescript
 electronActions({
-  // Glob pattern(s) to process and scan for handlers.
+  // Required: glob pattern(s) to process and scan for handlers.
   // Paths are relative to the Vite root. Negated patterns exclude files.
   // At least one non-negated include pattern is required.
-  // Default: "src/**/*.{js,ts,jsx,tsx}"
   files: ["src/**/*.{js,ts,jsx,tsx}", "!src/**/*.test.{ts,tsx}"],
 
   // Optional prefix prepended to every IPC channel name (default: "")
@@ -241,7 +248,7 @@ electronActions({
 ```
 
 > [!IMPORTANT]
-> `files` defaults to `"src/**/*.{js,ts,jsx,tsx}"` and should match every file that can contain `"use node"` handlers — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by globbing the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), set this option accordingly, otherwise the main process will not register those handlers.
+> `files` is required and should match every file that can contain `"use node"` handlers — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by globbing the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), set this option accordingly, otherwise the main process will not register those handlers.
 
 ---
 

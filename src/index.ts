@@ -38,7 +38,7 @@ function createFilesFilter(
 type ElectronActionsEnv = "renderer" | "main" | "preload";
 
 export function electronActions(
-  options: ElectronActionsOptions = {},
+  options: ElectronActionsOptions,
 ): ElectronActionsPlugins {
   return {
     renderer: createElectronActionsPlugin("renderer", options),
