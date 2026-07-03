@@ -288,7 +288,7 @@ export async function getUser(id: string) {
 
 // After (renderer bundle)
 export async function getUser(...args) {
-  return await window.$$vitePluginElectronActions["a3f2b1c4:getUser"](...args)
+  return await window.$$vitePluginElectronActions["a3f2b1c4d5e6:getUser"](...args)
 }
 ```
 
@@ -307,7 +307,7 @@ export async function getUser(id: string) {
 }
 
 $$vitePluginElectronActions_ipcMain.handle(
-  "a3f2b1c4:getUser",
+  "a3f2b1c4d5e6:getUser",
   (event, ...args) => $$vitePluginElectronActions_runAction(event, () => getUser(...args)),
 )
 ```
@@ -326,7 +326,7 @@ Because the `load-handlers` module is a **static** import of `vite-plugin-electr
 ```typescript
 // vite-plugin-electron-actions:channels (generated — data only)
 export default [
-  "a3f2b1c4:getUser",
+  "a3f2b1c4d5e6:getUser",
 ]
 ```
 
@@ -337,13 +337,13 @@ export default [
 Channel names are automatically derived from a hash of the absolute file path and function name:
 
 ```
-src/users/api.ts → getUser   becomes   "a3f2b1c4:getUser"
+src/users/api.ts → getUser   becomes   "a3f2b1c4d5e6:getUser"
 ```
 
 With a `channelPrefix` set to `"my-app:"`:
 
 ```
-src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4:getUser"
+src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4d5e6:getUser"
 ```
 
 You never reference channel names directly — this is handled automatically. Channel strings do not appear in the renderer bundle at all.
