@@ -24,7 +24,9 @@ import { electronActions } from "vite-plugin-electron-actions"
 import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
 
-const { renderer, main, preload } = electronActions()
+const { renderer, main, preload } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   plugins: [
@@ -55,7 +57,9 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
-const { renderer } = electronActions()
+const { renderer } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   plugins: [renderer],
@@ -68,7 +72,9 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
-const { main } = electronActions()
+const { main } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   build: {
@@ -85,7 +91,9 @@ export default defineConfig({
 import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
-const { preload } = electronActions()
+const { preload } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+})
 
 export default defineConfig({
   build: {
@@ -227,13 +235,12 @@ Other exports (`export const x = 5`) are silently stripped from the Renderer bun
 
 ```typescript
 electronActions({
-  // Glob pattern(s) to process and scan for handlers.
+  // Required: glob pattern(s) to process and scan for handlers.
   // Paths are relative to the Vite root. Negated patterns exclude files.
   // At least one non-negated include pattern is required.
-  // Default: "src/**/*.{js,ts,jsx,tsx}"
   files: ["src/**/*.{js,ts,jsx,tsx}", "!src/**/*.test.{ts,tsx}"],
 
-  // Optional prefix prepended to every IPC channel name (default: "")
+  // Optional prefix prepended to every IPC channel name (default: "$$electron-actions:")
   // Useful when multiple plugin instances need isolated handler sets
   // (e.g. separate renderer windows).
   channelPrefix: "my-app:",
@@ -241,7 +248,7 @@ electronActions({
 ```
 
 > [!IMPORTANT]
-> `files` defaults to `"src/**/*.{js,ts,jsx,tsx}"` and should match every file that can contain `"use node"` handlers — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by globbing the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), set this option accordingly, otherwise the main process will not register those handlers.
+> `files` is required and should match every file that can contain `"use node"` handlers — typically your renderer source tree. It is used by the **main process build** to discover all handlers at build time by globbing the filesystem directly, independently of the renderer's transform pass. If your `"use node"` files live outside `src/` (e.g. in `app/` or `packages/renderer/src/`), set this option accordingly, otherwise the main process will not register those handlers.
 
 ---
 
@@ -281,7 +288,7 @@ export async function getUser(id: string) {
 
 // After (renderer bundle)
 export async function getUser(...args) {
-  return await window.$$vitePluginElectronActions["a3f2b1c4:getUser"](...args)
+  return await window.$$vitePluginElectronActions["a3f2b1c4d5e6:getUser"](...args)
 }
 ```
 
@@ -300,7 +307,7 @@ export async function getUser(id: string) {
 }
 
 $$vitePluginElectronActions_ipcMain.handle(
-  "a3f2b1c4:getUser",
+  "a3f2b1c4d5e6:getUser",
   (event, ...args) => $$vitePluginElectronActions_runAction(event, () => getUser(...args)),
 )
 ```
@@ -319,7 +326,7 @@ Because the `load-handlers` module is a **static** import of `vite-plugin-electr
 ```typescript
 // vite-plugin-electron-actions:channels (generated — data only)
 export default [
-  "a3f2b1c4:getUser",
+  "a3f2b1c4d5e6:getUser",
 ]
 ```
 
@@ -330,13 +337,13 @@ export default [
 Channel names are automatically derived from a hash of the absolute file path and function name:
 
 ```
-src/users/api.ts → getUser   becomes   "a3f2b1c4:getUser"
+src/users/api.ts → getUser   becomes   "a3f2b1c4d5e6:getUser"
 ```
 
 With a `channelPrefix` set to `"my-app:"`:
 
 ```
-src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4:getUser"
+src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4d5e6:getUser"
 ```
 
 You never reference channel names directly — this is handled automatically. Channel strings do not appear in the renderer bundle at all.

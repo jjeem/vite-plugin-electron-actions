@@ -152,7 +152,7 @@ import { setupPreload } from "vite-plugin-electron-actions/preload";
 setupPreload();
 ```
 
-The plugin scans `files` (default `"src/**/*.{js,ts,jsx,tsx}"`) at build time to discover all handlers.
+The plugin scans the required `files` glob(s) at build time to discover all handlers.
 
 ### Virtual Module: `vite-plugin-electron-actions/preload`
 
@@ -181,7 +181,9 @@ for the preload build (all run in isolated Vite instances):
 ```ts
 import { electronActions } from "vite-plugin-electron-actions";
 
-const { renderer, main, preload } = electronActions();
+const { renderer, main, preload } = electronActions({
+  files: "src/**/*.{js,ts,jsx,tsx}",
+});
 
 export default defineConfig({
   plugins: [renderer],

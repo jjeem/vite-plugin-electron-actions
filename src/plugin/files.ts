@@ -1,13 +1,10 @@
-export const DEFAULT_FILES = "src/**/*.{js,ts,jsx,tsx}";
-
-export type FilePatternInput = string | readonly string[] | undefined;
+export type FilePatternInput = string | readonly string[];
 
 export function splitFilePatterns(files: FilePatternInput): {
   include: string[];
   exclude: string[];
 } {
-  const patterns =
-    typeof files === "string" ? [files] : (files ?? [DEFAULT_FILES]);
+  const patterns = typeof files === "string" ? [files] : files;
   const include: string[] = [];
   const exclude: string[] = [];
 
