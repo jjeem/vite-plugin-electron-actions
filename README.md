@@ -240,7 +240,7 @@ electronActions({
   // At least one non-negated include pattern is required.
   files: ["src/**/*.{js,ts,jsx,tsx}", "!src/**/*.test.{ts,tsx}"],
 
-  // Optional prefix prepended to every IPC channel name (default: "")
+  // Optional prefix prepended to every IPC channel name (default: "$$electron-actions:")
   // Useful when multiple plugin instances need isolated handler sets
   // (e.g. separate renderer windows).
   channelPrefix: "my-app:",

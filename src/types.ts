@@ -11,9 +11,9 @@ export interface ElectronActionsOptions {
   files: string | readonly string[];
   /**
    * Optional prefix prepended to every IPC channel name.
-   * Applies to `main` and `preload` envs.
+   * Pass an empty string when no prefix is needed.
    *
-   * @default ""
+   * @default "$$electron-actions:"
    */
   channelPrefix?: string;
 }
