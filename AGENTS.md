@@ -182,7 +182,7 @@ for the preload build (all run in isolated Vite instances):
 import { electronActions } from "vite-plugin-electron-actions";
 
 const { renderer, main, preload } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 });
 
 export default defineConfig({

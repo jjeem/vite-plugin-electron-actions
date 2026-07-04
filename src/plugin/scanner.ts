@@ -6,7 +6,7 @@ import {
   checkFileLevelDirective,
   checkFunctionLevelDirective,
 } from "./directives.js";
-import { type FilePatternInput, splitFilePatterns } from "./files.js";
+import { splitFilePatterns } from "./files.js";
 import { extractHandlerNames } from "./handlers.js";
 
 // ── Filesystem scanner ─────────────────────────────────────────
@@ -20,7 +20,7 @@ import { extractHandlerNames } from "./handlers.js";
  * `transform` pass having run first.
  */
 export function scanForHandlers(
-  files: FilePatternInput,
+  files: string[],
   root: string,
   prefix = "",
 ): Map<string, string[]> {

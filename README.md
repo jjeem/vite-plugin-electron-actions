@@ -25,7 +25,7 @@ import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
 
 const { renderer, main, preload } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -58,7 +58,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 const { renderer } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -73,7 +73,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 const { main } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -92,7 +92,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 const { preload } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -235,7 +235,7 @@ Other exports (`export const x = 5`) are silently stripped from the Renderer bun
 
 ```typescript
 electronActions({
-  // Required: glob pattern(s) to process and scan for handlers.
+  // Required: glob patterns to process and scan for handlers.
   // Paths are relative to the Vite root. Negated patterns exclude files.
   // At least one non-negated include pattern is required.
   files: ["src/**/*.{js,ts,jsx,tsx}", "!src/**/*.test.{ts,tsx}"],

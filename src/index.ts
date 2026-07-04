@@ -4,7 +4,7 @@ import {
   generateChannelsModule,
   generateHandlersLoaderModule,
 } from "./plugin/codegen.js";
-import { type FilePatternInput, splitFilePatterns } from "./plugin/files.js";
+import { splitFilePatterns } from "./plugin/files.js";
 import {
   scanForHandlers,
   transform,
@@ -27,7 +27,7 @@ const RESOLVED_CHANNELS_ID = "\0vite-plugin-electron-actions-channels";
 const DEFAULT_CHANNEL_PREFIX = "$$electron-actions:";
 
 function createFilesFilter(
-  files: FilePatternInput,
+  files: string[],
   root: string,
 ): (id: unknown) => boolean {
   const { include, exclude } = splitFilePatterns(files);

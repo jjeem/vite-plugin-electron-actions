@@ -26,14 +26,14 @@ describe("scanForHandlers", () => {
     onTestFinished,
   }) => {
     const { apiFile, root } = setup(onTestFinished);
-    const registry = scanForHandlers("src/api.ts", root);
+    const registry = scanForHandlers(["src/api.ts"], root);
 
     expect([...registry.keys()]).toEqual([apiFile]);
   });
 
   test("ignores files outside matching glob patterns", ({ onTestFinished }) => {
     const { apiFile, root } = setup(onTestFinished);
-    const registry = scanForHandlers("src/missing.ts", root);
+    const registry = scanForHandlers(["src/missing.ts"], root);
 
     expect([...registry.keys()]).not.toContain(apiFile);
     expect(registry.size).toBe(0);
@@ -69,7 +69,7 @@ describe("scanForHandlers", () => {
   }) => {
     const { root } = setup(onTestFinished);
     const prefix = "my-app:";
-    const registry = scanForHandlers("src/**/*.ts", root, prefix);
+    const registry = scanForHandlers(["src/**/*.ts"], root, prefix);
     const result = generateHandlersLoaderModule(registry);
     for (const filePath of registry.keys()) {
       expect(result).toContain(`"${filePath}"`);
@@ -81,7 +81,7 @@ describe("scanForHandlers", () => {
   }) => {
     const { root } = setup(onTestFinished);
     const prefix = "my-app:";
-    const registry = scanForHandlers("src/**/*.ts", root, prefix);
+    const registry = scanForHandlers(["src/**/*.ts"], root, prefix);
     const result = generateChannelsModule(registry);
     for (const channels of registry.values()) {
       for (const channel of channels) {
