@@ -2,6 +2,7 @@ import { parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
 import { channelName } from "../channel.ts";
 import {
+  generateChannelPrefixModule,
   generateChannelsModule,
   generateHandlersLoaderModule,
 } from "../codegen.ts";
@@ -77,5 +78,19 @@ describe("generateHandlersLoaderModule", () => {
     const registry = new Map([["/src/api.ts", [channel]]]);
     const result = generateHandlersLoaderModule(registry);
     expect(result).not.toContain(channel);
+  });
+});
+
+describe("generateChannelPrefixModule", () => {
+  test("generates the configured channel prefix", () => {
+    expect(generateChannelPrefixModule("my-app:")).toBe(
+      'export default "my-app:";',
+    );
+  });
+
+  test("escapes the channel prefix as a JavaScript string literal", () => {
+    const result = generateChannelPrefixModule('app"\\dev:\n');
+    expect(result).toContain(JSON.stringify('app"\\dev:\n'));
+    expect(() => parseSync("channel-prefix.ts", result)).not.toThrow();
   });
 });

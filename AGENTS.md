@@ -207,6 +207,7 @@ export default defineConfig({
 
 - `vite-plugin-electron-actions:load-handlers` — intercepted by `env:"main"` plugin; generates side-effect imports of all `"use node"` files; imported by `vite-plugin-electron-actions/main`
 - `vite-plugin-electron-actions:channels` — intercepted by `env:"preload"` plugin; generates a data-only `[channelString, ...]` array default export consumed by `setupPreload()`
+- `vite-plugin-electron-actions:channel-prefix` — intercepted by `env:"main"` and `env:"preload"` plugins; exports the configured or default channel prefix used by the main setup complete event
 
 ## Dependencies
 

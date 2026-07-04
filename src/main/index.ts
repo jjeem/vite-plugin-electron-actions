@@ -22,21 +22,28 @@ export const mainSetupPromise: Promise<true> = new Promise<true>(
   },
 );
 
+async function mainSetupCompleteEvent(): Promise<string> {
+  const { default: channelPrefix } = await import(
+    "vite-plugin-electron-actions:channel-prefix"
+  );
+  return `${channelPrefix}main-setup-complete`;
+}
+
 /**
  * Sends the main-setup-complete event to a list of BrowserWindows.
  * Waits for `mainSetupPromise` to resolve and for each window's webContents
  * to finish loading before sending.
  */
 export async function notifyWindows(windows: BrowserWindow[]): Promise<void> {
-  const result = await mainSetupPromise;
+  const [eventName, result] = await Promise.all([
+    mainSetupCompleteEvent(),
+    mainSetupPromise,
+  ]);
   const promises = windows.map((win) => {
     return new Promise<void>((resolve) => {
       const send = () => {
         if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-          win.webContents.send(
-            "$$electron-actions:main-setup-complete",
-            result,
-          );
+          win.webContents.send(eventName, result);
         }
         resolve();
       };
@@ -67,7 +74,7 @@ export async function notifyWindows(windows: BrowserWindow[]): Promise<void> {
 export interface SetupMainOptions {
   /**
    * BrowserWindows to notify once all handlers are registered.
-   * Each window will receive the `$$electron-actions:main-setup-complete`
+   * Each window will receive the `[channelPrefix]main-setup-complete`
    * event after its webContents finishes loading.
    */
   windows?: BrowserWindow[];
