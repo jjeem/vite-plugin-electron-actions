@@ -25,7 +25,7 @@ import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
 
 const { renderer, main, preload } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -58,7 +58,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 const { renderer } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -73,7 +73,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 const { main } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -92,7 +92,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 const { preload } = electronActions({
-  files: "src/**/*.{js,ts,jsx,tsx}",
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
 })
 
 export default defineConfig({
@@ -108,7 +108,7 @@ export default defineConfig({
 
 Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<true>` that resolves once all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
 
-Optionally pass a `windows` array — each `BrowserWindow` will receive a `$$electron-actions:main-setup-complete` IPC event once handlers are ready and the window finishes loading:
+Optionally pass a `windows` array — each `BrowserWindow` will receive a `[channelPrefix]main-setup-complete` IPC event once handlers are ready and the window finishes loading. With the default prefix, the event is `$$electron-actions:main-setup-complete`:
 
 ```typescript
 // electron/main.ts
@@ -235,12 +235,13 @@ Other exports (`export const x = 5`) are silently stripped from the Renderer bun
 
 ```typescript
 electronActions({
-  // Required: glob pattern(s) to process and scan for handlers.
+  // Required: glob patterns to process and scan for handlers.
   // Paths are relative to the Vite root. Negated patterns exclude files.
   // At least one non-negated include pattern is required.
   files: ["src/**/*.{js,ts,jsx,tsx}", "!src/**/*.test.{ts,tsx}"],
 
   // Optional prefix prepended to every IPC channel name (default: "$$electron-actions:")
+  // Also prefixes the main setup complete event.
   // Useful when multiple plugin instances need isolated handler sets
   // (e.g. separate renderer windows).
   channelPrefix: "my-app:",

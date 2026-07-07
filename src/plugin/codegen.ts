@@ -50,6 +50,10 @@ export function generateHandlersLoaderModule(
     .join("\n");
 }
 
+export function generateChannelPrefixModule(channelPrefix: string): string {
+  return `export default ${JSON.stringify(channelPrefix)};`;
+}
+
 // ── IPC invoker generators ─────────────────────────────────────
 
 export function ipcInvokerFn(name: string, key: string): string {

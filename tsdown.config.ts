@@ -8,6 +8,7 @@ export default defineConfig({
     neverBundle: [
       "vite-plugin-electron-actions:channels",
       "vite-plugin-electron-actions:load-handlers",
+      "vite-plugin-electron-actions:channel-prefix",
     ],
   },
 });

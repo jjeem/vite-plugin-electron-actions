@@ -1,3 +1,4 @@
+import channelPrefix from "vite-plugin-electron-actions:channel-prefix";
 import channels from "vite-plugin-electron-actions:channels";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -19,6 +20,7 @@ declare global {
  */
 export function setupPreload(): void {
   const api: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+  const mainSetupCompleteEvent = `${channelPrefix}main-setup-complete`;
   for (const channel of channels) {
     api[channel] = (...args) => ipcRenderer.invoke(channel, ...args);
   }
@@ -26,7 +28,7 @@ export function setupPreload(): void {
   contextBridge.exposeInMainWorld(
     "$$onMainSetupComplete",
     async (callback: (result: boolean) => void) => {
-      ipcRenderer.on("$$electron-actions:main-setup-complete", (_, result) => {
+      ipcRenderer.on(mainSetupCompleteEvent, (_, result) => {
         callback(result);
       });
     },
