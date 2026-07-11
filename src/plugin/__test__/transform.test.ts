@@ -516,37 +516,6 @@ export const sum = async (a, b) => {
     expect(result).toContain(mainIpcHandle("sum"));
   });
 
-  test("file-level: rejects non-action exports", () => {
-    const input = `\
-"use node";
-
-export const value = 1;
-
-export async function getValue() {
-  return value;
-}
-`;
-    expect(() => transformForMain(FILE, input)).toThrow(
-      /only allows async function exports/,
-    );
-  });
-
-  test("file-level: allows type and interface exports", () => {
-    const input = `\
-"use node";
-
-export type Result = { value: number };
-export interface Input { value: number }
-
-export async function getValue(input: Input): Promise<Result> {
-  return input;
-}
-`;
-    const result = transformForMain(FILE, input);
-    expect(result).not.toBeNull();
-    expect(result).toContain(mainIpcHandle("getValue"));
-  });
-
   test("function-level: appends handle call for exported function with directive", () => {
     const input = `\
 export async function getUser(id) {

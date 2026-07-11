@@ -399,8 +399,6 @@ export function transformForMain(
   const handlers: Array<{ name: string; channel: string }> = [];
 
   if (isFileLevel) {
-    validateFileLevelExports(fileName, program);
-
     // Strip the "use node" directive string from the output
     const directiveNode = program.body[0];
     if (directiveNode) {
