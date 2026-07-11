@@ -110,7 +110,7 @@ electron-actions/
 
 Two modes of marking server-side (Node.js) code:
 
-**File-level**: `"use node"` at the top of the file. All exported async functions become IPC calls. Sync function exports and re-exports (`export { foo }`) throw a build error. Other exports are silently stripped.
+**File-level**: `"use node"` at the top of the file. All exported async functions become IPC calls. Other runtime exports and re-exports (`export { foo }`) throw a build error. Type aliases and interfaces are allowed.
 
 ```ts
 "use node"

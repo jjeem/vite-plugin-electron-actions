@@ -215,9 +215,11 @@ These rules apply regardless of whether you use file-level or function-level `"u
 Additional constraints in **file-level** mode (any of these is a build error):
 
 - Sync function/arrow-function exports: `export function foo() {}`
+- Non-action runtime exports: `export const x = 5`
+- Default exports, classes, and enums
 - Re-exports: `export { foo }`
 
-Other exports (`export const x = 5`) are silently stripped from the Renderer bundle only.
+Type aliases and interfaces may still be exported from file-level action files.
 
 ---
 
