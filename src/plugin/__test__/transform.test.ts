@@ -324,7 +324,7 @@ export async function asyncFunc() {
       expect(() => transform(input, FILE)).toThrow(/re-exports/);
     });
 
-    test("file-level silently skips non-async variable export", () => {
+    test("file-level throws on non-action variable export", () => {
       const input = `
 "use node";
 
@@ -334,13 +334,12 @@ export async function asyncFunc() {
   return 3;
 }
 `;
-      const result = transform(input, FILE);
-      expect(result).not.toBeNull();
-      expect(result).not.toContain("export const x");
-      expect(result).toContain(rendererIpcCall("asyncFunc"));
+      expect(() => transform(input, FILE)).toThrow(
+        /only allows async function exports/,
+      );
     });
 
-    test("file-level silently strips type/interface exports", () => {
+    test("file-level allows type/interface exports", () => {
       const input = `
 "use node";
 
@@ -354,6 +353,21 @@ export async function asyncFunc() {
       const result = transform(input, FILE);
       expect(result).not.toBeNull();
       expect(result).toContain(rendererIpcCall("asyncFunc"));
+    });
+
+    test.each([
+      ["class", "export class Service {}"],
+      ["enum", "export enum Status { Ready }"],
+      ["default", "export default async function action() {}"],
+    ])("file-level throws on %s exports", (_kind, exportedValue) => {
+      const input = `
+"use node";
+
+${exportedValue}
+`;
+      expect(() => transform(input, FILE)).toThrow(
+        /only allows named async function exports|only allows async function exports/,
+      );
     });
 
     test("function-level throws on sync exported function with directive", () => {

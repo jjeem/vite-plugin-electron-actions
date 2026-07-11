@@ -3,6 +3,7 @@ import {
   type ImportDefaultSpecifier,
   type ImportNamespaceSpecifier,
   type ImportSpecifier,
+  type Program,
   parseSync,
 } from "oxc-parser";
 import { collectIdentifierPositions } from "./ast.js";
@@ -24,12 +25,77 @@ export { scanForHandlers } from "./scanner.js";
 
 // ── Renderer transforms ────────────────────────────────────────
 
+function validateFileLevelExports(fileName: string, program: Program): void {
+  for (const node of program.body) {
+    if (node.type === "ExportDefaultDeclaration") {
+      throw new Error(
+        `[vite-plugin-electron-actions] File-level "use node" only allows named async function exports, type aliases, and interfaces. Found default export in ${fileName}.`,
+      );
+    }
+
+    if (node.type === "ExportAllDeclaration") {
+      throw new Error(
+        `[vite-plugin-electron-actions] File-level "use node" does not allow re-exports. Found in ${fileName}.`,
+      );
+    }
+
+    if (node.type !== "ExportNamedDeclaration") continue;
+
+    const { declaration } = node;
+    if (!declaration) {
+      throw new Error(
+        `[vite-plugin-electron-actions] File-level "use node" does not allow re-exports (\`export { ... }\`). Found in ${fileName}.`,
+      );
+    }
+
+    if (
+      declaration.type === "TSTypeAliasDeclaration" ||
+      declaration.type === "TSInterfaceDeclaration"
+    ) {
+      continue;
+    }
+
+    if (declaration.type === "FunctionDeclaration") {
+      if (!declaration.async) {
+        throw new Error(
+          `[vite-plugin-electron-actions] File-level "use node" only allows async function exports. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
+        );
+      }
+      continue;
+    }
+
+    if (declaration.type === "VariableDeclaration") {
+      for (const decl of declaration.declarations) {
+        const init = decl.init;
+        const isAsyncArrow =
+          init?.type === "ArrowFunctionExpression" && init.async;
+        const isAsyncFnExpr = init?.type === "FunctionExpression" && init.async;
+
+        if (
+          (!isAsyncArrow && !isAsyncFnExpr) ||
+          decl.id.type !== "Identifier"
+        ) {
+          throw new Error(
+            `[vite-plugin-electron-actions] File-level "use node" only allows async function exports. Found non-action export \`${decl.id.type === "Identifier" ? decl.id.name : "(unknown)"}\` in ${fileName}.`,
+          );
+        }
+      }
+      continue;
+    }
+
+    throw new Error(
+      `[vite-plugin-electron-actions] File-level "use node" only allows async function exports, type aliases, and interfaces. Found unsupported export in ${fileName}.`,
+    );
+  }
+}
+
 export function transformFileLevelDirective(
   fileName: string,
   code: string,
   channelPrefix = "",
 ): string {
   const { program } = parseSync(fileName, code);
+  validateFileLevelExports(fileName, program);
   let newCode = "";
 
   for (const node of program.body) {
@@ -37,19 +103,7 @@ export function transformFileLevelDirective(
 
     const { declaration } = node;
 
-    // Re-exports: `export { foo }` or `export { foo } from "..."` — not allowed
-    if (!declaration && node.specifiers && node.specifiers.length > 0) {
-      throw new Error(
-        `[vite-plugin-electron-actions] File-level "use node" does not allow re-exports (\`export { ... }\`). Found in ${fileName}.`,
-      );
-    }
-
     if (declaration?.type === "FunctionDeclaration") {
-      if (!declaration.async) {
-        throw new Error(
-          `[vite-plugin-electron-actions] File-level "use node" only allows async function exports. Found sync function \`${declaration.id?.name ?? "(anonymous)"}\` in ${fileName}.`,
-        );
-      }
       if (!declaration.id || declaration.id.type !== "Identifier") {
         throw new Error("Exported async function must have a name");
       }
