@@ -243,14 +243,7 @@ These rules apply regardless of whether you use file-level or function-level `"u
 - **`async` is required.** Every `"use node"` function must be declared `async`. A sync function with the directive is a build error.
 - **Top-level only.** Only top-level function declarations and variable declarations are processed. Functions nested inside blocks, conditionals, loops, or other functions are silently ignored — the directive has no effect there.
 
-Additional constraints in **file-level** mode (any of these is a build error):
-
-- Sync function/arrow-function exports: `export function foo() {}`
-- Non-action runtime exports: `export const x = 5`
-- Default exports, classes, and enums
-- Re-exports: `export { foo }`
-
-Type aliases and interfaces may still be exported from file-level action files.
+In **file-level** mode, only actions (async actions), type aliases, and interfaces may be exported; any other export is a build error.
 
 ---
 
