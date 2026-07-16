@@ -1,6 +1,20 @@
 # vite-plugin-electron-actions
 
-A Vite plugin that lets you mark functions with a `"use node"` directive so they run in the Electron main process — similar to React `"use server"`. The plugin transforms marked functions into IPC calls in the renderer and automatically registers `ipcMain.handle()` calls in the main process.
+This plugin brings a React `"use server"`-style workflow to Electron. Add `"use node"` to an async function to run it in the main process while calling it like a local function from the renderer. The plugin generates the IPC bridge, replaces the renderer implementation with an IPC call, and registers the corresponding `ipcMain` handler.
+
+```typescript
+// renderer.ts
+import { readFile } from "node:fs/promises"
+
+export async function readConfig() {
+  "use node"
+
+  return readFile("config.json", "utf8")
+}
+
+// Called from the renderer; executed in the main process
+const config = await readConfig()
+```
 
 > [!CAUTION]
 > This package is in early development. The API and internal behavior are subject to frequent changes. 
@@ -12,11 +26,14 @@ A Vite plugin that lets you mark functions with a `"use node"` directive so they
 npm install -D vite-plugin-electron-actions
 ```
 
-## Setup
+## Usage
+
+### 1. Setup
 
 Call `electronActions()` once, then register the returned plugin instances in the matching Vite build environments.
 
-### With `vite-plugin-electron`
+
+#### A) With `vite-plugin-electron`
 
 ```typescript
 // vite.config.ts
@@ -25,7 +42,7 @@ import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
 
 const { renderer, main, preload } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
+  files: ["src/**/*.{js,ts,jsx,tsx}"], // this should point to your renderer files where the directive is used
 })
 
 export default defineConfig({
@@ -49,7 +66,7 @@ export default defineConfig({
 })
 ```
 
-### Without `vite-plugin-electron` (pure Vite)
+#### B) Without `vite-plugin-electron` (pure Vite)
 
 **`vite.config.ts`** (renderer):
 
@@ -58,7 +75,7 @@ import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
 
 const { renderer } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
+  files: ["src/**/*.{js,ts,jsx,tsx}"], // this should point to your renderer files where the directive is used
 })
 
 export default defineConfig({
@@ -78,7 +95,7 @@ const { main } = electronActions({
 
 export default defineConfig({
   build: {
-    lib: { entry: "electron/main.ts", formats: ["cjs"] },
+    lib: { entry: "electron/main.ts" },
     rollupOptions: { external: ["electron"] },
   },
   plugins: [main],
@@ -97,14 +114,14 @@ const { preload } = electronActions({
 
 export default defineConfig({
   build: {
-    lib: { entry: "electron/preload.ts", formats: ["cjs"] },
+    lib: { entry: "electron/preload.ts" },
     rollupOptions: { external: ["electron"] },
   },
   plugins: [preload],
 })
 ```
 
-### Main process
+### 2. Main process
 
 Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<true>` that resolves once all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
 
@@ -121,7 +138,7 @@ app.whenReady().then(async () => {
 })
 ```
 
-### Preload script
+### 3. Preload script
 
 Call `setupPreload()` to expose all `"use node"` functions to the renderer via `contextBridge`:
 
@@ -203,6 +220,20 @@ available through normal async work inside the action.
 > This includes calling the same function directly from the main process, because
 > there is no IPC event context in that case.
 
+### Main setup notification
+
+The renderer can subscribe to `window.$$onMainSetupComplete` to know when all action handlers have been registered:
+
+```typescript
+window.$$onMainSetupComplete((ready) => {
+  if (ready) {
+    // "use node" actions are ready to call
+  }
+})
+```
+
+The callback is triggered for windows passed to `setupMain({ windows })` or `notifyWindows()`, after the window finishes loading. This is an event rather than persistent state, so a listener registered after the notification is sent will not receive it.
+
 ---
 
 ## Rules
@@ -229,7 +260,8 @@ Type aliases and interfaces may still be exported from file-level action files.
 
 - **Validate all inputs.** Check argument count, types, and value ranges before acting on them. Never assume the caller passed well-formed data.
 - **Apply access control where needed.** If a handler performs a sensitive operation (filesystem writes, network requests, spawning processes), add appropriate checks rather than relying on the renderer to gate access.
-- **Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing — but this does not protect against argument manipulation.
+
+**Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing — but this does not protect against argument manipulation.
 
 ---
 
@@ -277,6 +309,22 @@ try {
 ---
 
 ## How it works
+
+### IPC channel names
+
+Channel names are automatically derived from a hash of the absolute file path and function name:
+
+```
+src/users/api.ts → getUser   becomes   "a3f2b1c4d5e6:getUser"
+```
+
+With a `channelPrefix` set to `"my-app:"`:
+
+```
+src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4d5e6:getUser"
+```
+
+You never reference channel names directly — this is handled automatically.
 
 **Renderer transform** (`src/api.ts` before → after):
 
@@ -334,22 +382,6 @@ export default [
 ```
 
 `setupPreload()` in `src/preload.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
-
-### IPC channel names
-
-Channel names are automatically derived from a hash of the absolute file path and function name:
-
-```
-src/users/api.ts → getUser   becomes   "a3f2b1c4d5e6:getUser"
-```
-
-With a `channelPrefix` set to `"my-app:"`:
-
-```
-src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4d5e6:getUser"
-```
-
-You never reference channel names directly — this is handled automatically. Channel strings do not appear in the renderer bundle at all.
 
 ---
 
