@@ -240,10 +240,10 @@ The callback is triggered for windows passed to `setupMain({ windows })` or `not
 
 These rules apply regardless of whether you use file-level or function-level `"use node"`:
 
-- **`async` is required.** Every `"use node"` function must be declared `async`. A sync function with the directive is a build error.
-- **Top-level only.** Only top-level function declarations and variable declarations are processed. Functions nested inside blocks, conditionals, loops, or other functions are silently ignored — the directive has no effect there.
+- **`async` is required:** Every `"use node"` function must be declared `async`. A sync function with the directive is a build error.
+- **Top-level only:** Only top-level function declarations and variable declarations are processed. Functions nested inside blocks, conditionals, loops, or other functions are silently ignored — the directive has no effect there.
 
-In **file-level** mode, only actions (async actions), type aliases, and interfaces may be exported; any other export is a build error.
+In **file-level** mode, only async actions, type aliases, and interfaces may be exported; any other export is a build error.
 
 ---
 
