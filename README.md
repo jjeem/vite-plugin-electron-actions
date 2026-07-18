@@ -1,6 +1,20 @@
 # vite-plugin-electron-actions
 
-A Vite plugin that lets you mark functions with a `"use node"` directive so they run in the Electron main process — similar to React `"use server"`. The plugin transforms marked functions into IPC calls in the renderer and automatically registers `ipcMain.handle()` calls in the main process.
+This plugin brings a React `"use server"`-style workflow to Electron. Add `"use node"` to an async function to run it in the main process while calling it like a local function from the renderer. The plugin generates the IPC bridge, replaces the renderer implementation with an IPC call, and registers the corresponding `ipcMain` handler.
+
+```typescript
+// renderer.ts
+import { readFile } from "node:fs/promises"
+
+export async function readConfig() {
+  "use node"
+
+  return readFile("config.json", "utf8")
+}
+
+// Called from the renderer; executed in the main process
+const config = await readConfig()
+```
 
 > [!CAUTION]
 > This package is in early development. The API and internal behavior are subject to frequent changes. 
@@ -12,21 +26,30 @@ A Vite plugin that lets you mark functions with a `"use node"` directive so they
 npm install -D vite-plugin-electron-actions
 ```
 
-## Setup
+## Usage
 
-Call `electronActions()` once, then register the returned plugin instances in the matching Vite build environments.
+### 1. Setup
 
-### With `vite-plugin-electron`
+Configure `electronActions()` in a shared file, then import each returned plugin into its matching Vite build environment.
+
+**`electron-actions.config.ts`**:
+
+```typescript
+import { electronActions } from "vite-plugin-electron-actions"
+
+export const { renderer, main, preload } = electronActions({
+  // Match every renderer file where the directive may be used.
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
+})
+```
+
+#### A) With `vite-plugin-electron`
 
 ```typescript
 // vite.config.ts
-import { electronActions } from "vite-plugin-electron-actions"
 import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
-
-const { renderer, main, preload } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
-})
+import { main, preload, renderer } from "./electron-actions.config"
 
 export default defineConfig({
   plugins: [
@@ -49,17 +72,13 @@ export default defineConfig({
 })
 ```
 
-### Without `vite-plugin-electron` (pure Vite)
+#### B) Without `vite-plugin-electron` (pure Vite)
 
 **`vite.config.ts`** (renderer):
 
 ```typescript
-import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
-
-const { renderer } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
-})
+import { renderer } from "./electron-actions.config"
 
 export default defineConfig({
   plugins: [renderer],
@@ -69,16 +88,12 @@ export default defineConfig({
 **`vite.main.config.ts`** (main process):
 
 ```typescript
-import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
-
-const { main } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
-})
+import { main } from "./electron-actions.config"
 
 export default defineConfig({
   build: {
-    lib: { entry: "electron/main.ts", formats: ["cjs"] },
+    lib: { entry: "electron/main.ts" },
     rollupOptions: { external: ["electron"] },
   },
   plugins: [main],
@@ -88,23 +103,19 @@ export default defineConfig({
 **`vite.preload.config.ts`** (preload):
 
 ```typescript
-import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
-
-const { preload } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
-})
+import { preload } from "./electron-actions.config"
 
 export default defineConfig({
   build: {
-    lib: { entry: "electron/preload.ts", formats: ["cjs"] },
+    lib: { entry: "electron/preload.ts" },
     rollupOptions: { external: ["electron"] },
   },
   plugins: [preload],
 })
 ```
 
-### Main process
+### 2. Main process
 
 Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<true>` that resolves once all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
 
@@ -121,7 +132,7 @@ app.whenReady().then(async () => {
 })
 ```
 
-### Preload script
+### 3. Preload script
 
 Call `setupPreload()` to expose all `"use node"` functions to the renderer via `contextBridge`:
 
@@ -203,23 +214,30 @@ available through normal async work inside the action.
 > This includes calling the same function directly from the main process, because
 > there is no IPC event context in that case.
 
+### Main setup notification
+
+The renderer can subscribe to `window.$$onMainSetupComplete` to know when all action handlers have been registered:
+
+```typescript
+window.$$onMainSetupComplete((ready) => {
+  if (ready) {
+    // "use node" actions are ready to call
+  }
+})
+```
+
+The callback is triggered for windows passed to `setupMain({ windows })` or `notifyWindows()`, after the window finishes loading. This is an event rather than persistent state, so a listener registered after the notification is sent will not receive it.
+
 ---
 
 ## Rules
 
 These rules apply regardless of whether you use file-level or function-level `"use node"`:
 
-- **`async` is required.** Every `"use node"` function must be declared `async`. A sync function with the directive is a build error.
-- **Top-level only.** Only top-level function declarations and variable declarations are processed. Functions nested inside blocks, conditionals, loops, or other functions are silently ignored — the directive has no effect there.
+- **`async` is required:** Every `"use node"` function must be declared `async`. A sync function with the directive is a build error.
+- **Top-level only:** Only top-level function declarations and variable declarations are processed. Functions nested inside blocks, conditionals, loops, or other functions are silently ignored — the directive has no effect there.
 
-Additional constraints in **file-level** mode (any of these is a build error):
-
-- Sync function/arrow-function exports: `export function foo() {}`
-- Non-action runtime exports: `export const x = 5`
-- Default exports, classes, and enums
-- Re-exports: `export { foo }`
-
-Type aliases and interfaces may still be exported from file-level action files.
+In **file-level** mode, only async actions, type aliases, and interfaces may be exported; any other export is a build error.
 
 ---
 
@@ -229,7 +247,8 @@ Type aliases and interfaces may still be exported from file-level action files.
 
 - **Validate all inputs.** Check argument count, types, and value ranges before acting on them. Never assume the caller passed well-formed data.
 - **Apply access control where needed.** If a handler performs a sensitive operation (filesystem writes, network requests, spawning processes), add appropriate checks rather than relying on the renderer to gate access.
-- **Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing — but this does not protect against argument manipulation.
+
+**Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing. The `channelPrefix` namespaces these generated channels to avoid collisions with your app's own IPC channels, third-party libraries, or other plugin instances. Keep the default prefix unless you need a custom namespace; if you override it, choose a prefix unique to that plugin instance.
 
 ---
 
@@ -278,6 +297,22 @@ try {
 
 ## How it works
 
+### IPC channel names
+
+Channel names use the default `"$$electron-actions:"` prefix followed by a hash of the absolute file path and function name:
+
+```
+src/users/api.ts → getUser   becomes   "$$electron-actions:a3f2b1c4d5e6:getUser"
+```
+
+With a `channelPrefix` set to `"my-app:"`:
+
+```
+src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4d5e6:getUser"
+```
+
+You never reference channel names directly — this is handled automatically.
+
 **Renderer transform** (`src/api.ts` before → after):
 
 ```typescript
@@ -291,7 +326,7 @@ export async function getUser(id: string) {
 
 // After (renderer bundle)
 export async function getUser(...args) {
-  return await window.$$vitePluginElectronActions["a3f2b1c4d5e6:getUser"](...args)
+  return await window.$$vitePluginElectronActions["$$electron-actions:a3f2b1c4d5e6:getUser"](...args)
 }
 ```
 
@@ -310,7 +345,7 @@ export async function getUser(id: string) {
 }
 
 $$vitePluginElectronActions_ipcMain.handle(
-  "a3f2b1c4d5e6:getUser",
+  "$$electron-actions:a3f2b1c4d5e6:getUser",
   (event, ...args) => $$vitePluginElectronActions_runAction(event, () => getUser(...args)),
 )
 ```
@@ -329,27 +364,11 @@ Because the `load-handlers` module is a **static** import of `vite-plugin-electr
 ```typescript
 // vite-plugin-electron-actions:channels (generated — data only)
 export default [
-  "a3f2b1c4d5e6:getUser",
+  "$$electron-actions:a3f2b1c4d5e6:getUser",
 ]
 ```
 
 `setupPreload()` in `src/preload.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
-
-### IPC channel names
-
-Channel names are automatically derived from a hash of the absolute file path and function name:
-
-```
-src/users/api.ts → getUser   becomes   "a3f2b1c4d5e6:getUser"
-```
-
-With a `channelPrefix` set to `"my-app:"`:
-
-```
-src/users/api.ts → getUser   becomes   "my-app:a3f2b1c4d5e6:getUser"
-```
-
-You never reference channel names directly — this is handled automatically. Channel strings do not appear in the renderer bundle at all.
 
 ---
 
