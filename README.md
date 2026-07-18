@@ -30,20 +30,26 @@ npm install -D vite-plugin-electron-actions
 
 ### 1. Setup
 
-Call `electronActions()` once, then register the returned plugin instances in the matching Vite build environments.
+Configure `electronActions()` in a shared file, then import each returned plugin into its matching Vite build environment.
 
+**`electron-actions.config.ts`**:
+
+```typescript
+import { electronActions } from "vite-plugin-electron-actions"
+
+export const { renderer, main, preload } = electronActions({
+  // Match every renderer file where the directive may be used.
+  files: ["src/**/*.{js,ts,jsx,tsx}"],
+})
+```
 
 #### A) With `vite-plugin-electron`
 
 ```typescript
 // vite.config.ts
-import { electronActions } from "vite-plugin-electron-actions"
 import electron from "vite-plugin-electron"
 import { defineConfig } from "vite"
-
-const { renderer, main, preload } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"], // this should point to your renderer files where the directive is used
-})
+import { main, preload, renderer } from "./electron-actions.config"
 
 export default defineConfig({
   plugins: [
@@ -71,12 +77,8 @@ export default defineConfig({
 **`vite.config.ts`** (renderer):
 
 ```typescript
-import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
-
-const { renderer } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"], // this should point to your renderer files where the directive is used
-})
+import { renderer } from "./electron-actions.config"
 
 export default defineConfig({
   plugins: [renderer],
@@ -86,12 +88,8 @@ export default defineConfig({
 **`vite.main.config.ts`** (main process):
 
 ```typescript
-import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
-
-const { main } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
-})
+import { main } from "./electron-actions.config"
 
 export default defineConfig({
   build: {
@@ -105,12 +103,8 @@ export default defineConfig({
 **`vite.preload.config.ts`** (preload):
 
 ```typescript
-import { electronActions } from "vite-plugin-electron-actions"
 import { defineConfig } from "vite"
-
-const { preload } = electronActions({
-  files: ["src/**/*.{js,ts,jsx,tsx}"],
-})
+import { preload } from "./electron-actions.config"
 
 export default defineConfig({
   build: {
