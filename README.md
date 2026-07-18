@@ -254,7 +254,7 @@ In **file-level** mode, only async actions, type aliases, and interfaces may be 
 - **Validate all inputs.** Check argument count, types, and value ranges before acting on them. Never assume the caller passed well-formed data.
 - **Apply access control where needed.** If a handler performs a sensitive operation (filesystem writes, network requests, spawning processes), add appropriate checks rather than relying on the renderer to gate access.
 
-**Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing — but this does not protect against argument manipulation.
+**Channel names are fixed at build time.** The IPC channels are derived from a hash of the file path and function name and are not user-controllable, which prevents channel-name spoofing. The `channelPrefix` namespaces these generated channels to avoid collisions with your app's own IPC channels, third-party libraries, or other plugin instances. Keep the default prefix unless you need a custom namespace; if you override it, choose a prefix unique to that plugin instance.
 
 ---
 
