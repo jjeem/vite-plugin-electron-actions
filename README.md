@@ -16,10 +16,6 @@ export async function readConfig() {
 const config = await readConfig()
 ```
 
-> [!CAUTION]
-> This package is in early development. The API and internal behavior are subject to frequent changes. 
-> Do not use in production without expecting breaking changes in any version.
-
 ## Installation
 
 ```bash
