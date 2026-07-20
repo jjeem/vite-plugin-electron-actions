@@ -113,20 +113,57 @@ export default defineConfig({
 
 ### 2. Main process
 
-Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<true>` that resolves once all handlers are registered (or rejects on error). The same promise is available as `mainSetupPromise` exported from `"vite-plugin-electron-actions/main"` if you need to await it from elsewhere.
-
-Optionally pass a `windows` array — each `BrowserWindow` will receive a `[channelPrefix]main-setup-complete` IPC event once handlers are ready and the window finishes loading. With the default prefix, the event is `$$electron-actions:main-setup-complete`:
+Call `setupMain()` once during app startup to register all `ipcMain.handle()` calls. It returns a `Promise<true>` that resolves once all handlers are registered, or rejects if loading them fails.
 
 ```typescript
 // electron/main.ts
-import { setupMain, mainSetupPromise, notifyWindows } from "vite-plugin-electron-actions/main"
+import { setupMain } from "vite-plugin-electron-actions/main"
 
 app.whenReady().then(async () => {
-  const win = new BrowserWindow({ /* ... */ })
-  await setupMain({ windows: [win] })
+  await setupMain()
   // all ipcMain.handle() calls are now registered
 })
 ```
+
+#### Setup completion and window notifications
+
+`mainSetupPromise` is the same promise returned by `setupMain()`. It can be awaited from another part of the main process when code needs to wait for all handlers without calling `setupMain()` again.
+
+`notifyWindows(windows)` waits for `mainSetupPromise` and for each window to finish loading, then sends the `[channelPrefix]main-setup-complete` IPC event. Passing `windows` to `setupMain({ windows })` uses the same notification flow automatically. With the default prefix, the event is `$$electron-actions:main-setup-complete`.
+
+```typescript
+// electron/main.ts
+import {
+  mainSetupPromise,
+  notifyWindows,
+  setupMain,
+} from "vite-plugin-electron-actions/main"
+
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({ /* ... */ })
+
+  // Recommended shorthand: setup and notify this window.
+  await setupMain({ windows: [win] })
+
+  // Elsewhere, wait for setup completion without starting it again.
+  await mainSetupPromise
+
+  // Notify additional windows created later.
+  await notifyWindows([anotherWindow])
+})
+```
+
+After `setupPreload()` runs, the renderer can subscribe through `window.$$onMainSetupComplete`:
+
+```typescript
+window.$$onMainSetupComplete((ready) => {
+  if (ready) {
+    // "use node" actions are ready to call
+  }
+})
+```
+
+This notification is an event rather than persistent state. A listener registered after the event has been sent will not receive the earlier notification.
 
 ### 3. Preload script
 
@@ -209,20 +246,6 @@ available through normal async work inside the action.
 > `getActionContext()` throws if it is called outside a running `"use node"` action.
 > This includes calling the same function directly from the main process, because
 > there is no IPC event context in that case.
-
-### Main setup notification
-
-The renderer can subscribe to `window.$$onMainSetupComplete` to know when all action handlers have been registered:
-
-```typescript
-window.$$onMainSetupComplete((ready) => {
-  if (ready) {
-    // "use node" actions are ready to call
-  }
-})
-```
-
-The callback is triggered for windows passed to `setupMain({ windows })` or `notifyWindows()`, after the window finishes loading. This is an event rather than persistent state, so a listener registered after the notification is sent will not receive it.
 
 ---
 
