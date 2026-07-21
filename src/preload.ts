@@ -2,14 +2,9 @@ import channelPrefix from "vite-plugin-electron-actions:channel-prefix";
 import channels from "vite-plugin-electron-actions:channels";
 import { contextBridge, ipcRenderer } from "electron";
 
-declare global {
-  interface Window {
-    $$vitePluginElectronActions: Record<
-      string,
-      (...args: unknown[]) => Promise<unknown>
-    >;
-    $$onMainSetupComplete: (callback: (result: boolean) => void) => void;
-  }
+interface PreloadApi {
+  [key: string]: unknown;
+  onMainSetupComplete(callback: () => void): () => void;
 }
 
 /**
@@ -19,18 +14,20 @@ declare global {
  * Requires the `preload` plugin from `electronActions()` in your Vite config.
  */
 export function setupPreload(): void {
-  const api: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   const mainSetupCompleteEvent = `${channelPrefix}main-setup-complete`;
+  const api: PreloadApi = {
+    onMainSetupComplete(callback) {
+      const listener = () => callback();
+
+      ipcRenderer.on(mainSetupCompleteEvent, listener);
+
+      return () => {
+        ipcRenderer.removeListener(mainSetupCompleteEvent, listener);
+      };
+    },
+  };
   for (const channel of channels) {
-    api[channel] = (...args) => ipcRenderer.invoke(channel, ...args);
+    api[channel] = (...args: unknown[]) => ipcRenderer.invoke(channel, ...args);
   }
   contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api);
-  contextBridge.exposeInMainWorld(
-    "$$onMainSetupComplete",
-    async (callback: (result: boolean) => void) => {
-      ipcRenderer.on(mainSetupCompleteEvent, (_, result) => {
-        callback(result);
-      });
-    },
-  );
 }

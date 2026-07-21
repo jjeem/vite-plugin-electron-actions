@@ -35,7 +35,7 @@ async function mainSetupCompleteEvent(): Promise<string> {
  * to finish loading before sending.
  */
 export async function notifyWindows(windows: BrowserWindow[]): Promise<void> {
-  const [eventName, result] = await Promise.all([
+  const [eventName] = await Promise.all([
     mainSetupCompleteEvent(),
     mainSetupPromise,
   ]);
@@ -43,7 +43,7 @@ export async function notifyWindows(windows: BrowserWindow[]): Promise<void> {
     return new Promise<void>((resolve) => {
       const send = () => {
         if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-          win.webContents.send(eventName, result);
+          win.webContents.send(eventName);
         }
         resolve();
       };

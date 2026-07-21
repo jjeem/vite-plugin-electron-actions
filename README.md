@@ -153,17 +153,20 @@ app.whenReady().then(async () => {
 })
 ```
 
-After `setupPreload()` runs, the renderer can subscribe through `window.$$onMainSetupComplete`:
+The renderer can subscribe through `onMainSetupComplete`. The callback only runs after setup succeeds, and the returned function removes the listener:
 
 ```typescript
-window.$$onMainSetupComplete((ready) => {
-  if (ready) {
-    // "use node" actions are ready to call
-  }
+import { onMainSetupComplete } from "vite-plugin-electron-actions/renderer"
+
+const unsubscribe = onMainSetupComplete(() => {
+  // "use node" actions are ready to call
 })
+
+// Later, when the listener is no longer needed.
+unsubscribe()
 ```
 
-This notification is an event rather than persistent state. A listener registered after the event has been sent will not receive the earlier notification.
+If `mainSetupPromise` rejects, no notification is sent. This notification is an event rather than persistent state, so a listener registered after it has been sent will not receive the earlier notification.
 
 ### 3. Preload script
 
@@ -176,7 +179,7 @@ import { setupPreload } from "vite-plugin-electron-actions/preload"
 setupPreload()
 ```
 
-This exposes `window.$$vitePluginElectronActions` via `contextBridge.exposeInMainWorld` as an object of individually named functions. Each function is locked to a single pre-determined IPC channel — the renderer cannot invoke arbitrary channels.
+This exposes one internal `window.$$vitePluginElectronActions` bridge containing the action invokers and setup notification subscription. Each action is locked to a single pre-determined IPC channel — the renderer cannot invoke arbitrary channels. Application code should use `onMainSetupComplete()` from the renderer entry `"vite-plugin-electron-actions/renderer"` instead of accessing the bridge directly.
 
 ---
 
@@ -387,7 +390,7 @@ export default [
 ]
 ```
 
-`setupPreload()` in `src/preload.ts` iterates this array and wires up `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
+`setupPreload()` in `src/preload.ts` iterates this array and exposes one internal bridge with the action invokers and `onMainSetupComplete()` through `contextBridge.exposeInMainWorld("$$vitePluginElectronActions", api)`.
 
 ---
 
