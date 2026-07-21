@@ -53,14 +53,26 @@ jobs:
       - name: Publish to npm
         run: pnpm publish --tag "${{ steps.version.outputs.npm_tag }}" --provenance --no-git-checks --access public
 
+      - name: Check for existing GitHub Release
+        id: github_release
+        run: |
+          if gh release view "${{ steps.version.outputs.value }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create GitHub Release
+        if: steps.github_release.outputs.exists != 'true'
         run: |
           PRERELEASE_FLAG=""
           if [ "${{ steps.version.outputs.is_prerelease }}" = "true" ]; then
             PRERELEASE_FLAG="--prerelease"
           fi
 
-          gh release create ${{ steps.version.outputs.value }} \
+          gh release create "${{ steps.version.outputs.value }}" \
             $PRERELEASE_FLAG \
             --title "${{ steps.version.outputs.value }}" \
             --generate-notes \
