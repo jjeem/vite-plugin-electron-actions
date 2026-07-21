@@ -80,7 +80,8 @@ electron-actions/
 │   ├── index.ts              # Vite plugin entry: electronActions() returns renderer/main/preload plugins
 │   ├── types.ts              # ElectronActionsOptions and ElectronActionsPlugins types
 │   ├── virtual.d.ts          # Ambient type declarations for vite-plugin-electron-actions:channels (string[]) and vite-plugin-electron-actions:load-handlers
-│   ├── preload.ts            # setupPreload() + Window.$$vitePluginElectronActions global type; imports vite-plugin-electron-actions:channels
+│   ├── preload.ts            # setupPreload() exposes action invokers and setup notification on one internal bridge
+│   ├── renderer.ts           # onMainSetupComplete() renderer API; returns an unsubscribe function
 │   ├── plugin/
 │   │   ├── ast.ts            # AST utilities (collectIdentifierPositions)
 │   │   ├── channel.ts        # channelName() — derives IPC channel from file path, function name, and optional prefix
@@ -101,7 +102,8 @@ electron-actions/
 │   ├── index.d.cts           # CJS type declarations
 │   ├── main/
 │   │   └── index.mjs         # ESM build (main entry — setupMain)
-│   └── preload.mjs           # ESM build (preload entry — setupPreload)
+│   ├── preload.mjs           # ESM build (preload entry — setupPreload)
+│   └── renderer.mjs          # ESM build (renderer entry — onMainSetupComplete)
 ```
 
 ## How the Plugin Works
@@ -167,8 +169,10 @@ setupPreload();
 
 ### Renderer Bridge
 
-`setupPreload()` exposes `window.$$vitePluginElectronActions` via `contextBridge.exposeInMainWorld` as an object
-of individually named functions, each locked to a single pre-determined IPC channel. The
+`setupPreload()` exposes one internal `window.$$vitePluginElectronActions` object via
+`contextBridge.exposeInMainWorld`. It contains individually named action functions, each
+locked to a single pre-determined IPC channel, and the setup notification subscription used
+by `onMainSetupComplete()` from `vite-plugin-electron-actions/renderer`. The
 renderer cannot invoke arbitrary channels — it can only call the specific named functions
 declared with `"use node"`.
 

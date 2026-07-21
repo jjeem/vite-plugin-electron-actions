@@ -44,6 +44,16 @@
         "types": "./dist/preload.d.cts",
         "default": "./dist/preload.cjs"
       }
+    },
+    "./renderer": {
+      "import": {
+        "types": "./dist/renderer.d.mts",
+        "default": "./dist/renderer.mjs"
+      },
+      "require": {
+        "types": "./dist/renderer.d.cts",
+        "default": "./dist/renderer.cjs"
+      }
     }
   },
   "files": [
