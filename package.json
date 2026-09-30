@@ -73,7 +73,7 @@
   },
   "dependencies": {
     "magic-string": "^0.30.21",
-    "oxc-parser": "^0.125.0",
+    "oxc-parser": "^0.151.0",
     "tinyglobby": "^0.2.17"
   },
   "devDependencies": {
