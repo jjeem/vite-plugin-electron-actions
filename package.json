@@ -72,7 +72,7 @@
     "vite": ">=6.0.0"
   },
   "dependencies": {
-    "magic-string": "^0.30.21",
+    "magic-string": "^1.4.2",
     "oxc-parser": "^0.151.0",
     "tinyglobby": "^0.2.17"
   },
