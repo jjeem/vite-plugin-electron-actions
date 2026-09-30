@@ -79,7 +79,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.3",
     "@types/node": "^24.10.0",
-    "electron": "^30.0.0",
+    "electron": "^41.10.6",
     "tsdown": "^0.23.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",
